@@ -30,6 +30,9 @@ export type AcaoAuditoria =
   | 'ACESSO_NEGADO'
   // Usuários
   | 'USUARIO_CRIADO'
+  | 'USUARIO_ATUALIZADO'
+  | 'USUARIO_ATIVADO'
+  | 'USUARIO_DESATIVADO'
   | 'USUARIO_REMOVIDO'
   | 'PAPEL_ALTERADO'
   // Serventias
