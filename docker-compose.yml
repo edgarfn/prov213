@@ -51,7 +51,7 @@ services:
         condition: service_healthy
     networks:
       - prov213-net
-
+      - proxy
 volumes:
   postgres_data:
   uploads_data:
@@ -59,3 +59,6 @@ volumes:
 networks:
   prov213-net:
     driver: bridge
+
+  proxy:
+    external: true
