@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { MFASetupCard } from '@/components/mfa-setup-card'
+import { ChangePasswordCard } from '@/components/change-password-card'
 import { ProrrogacaoCard } from '@/components/prorrogacao-card'
 
 export default async function ConfiguracoesPage() {
@@ -66,6 +67,9 @@ export default async function ConfiguracoesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Senha */}
+      <ChangePasswordCard />
 
       {/* MFA */}
       <MFASetupCard mfaEnabled={user?.mfaEnabled ?? false} mfaVerified={user?.mfaVerified ?? false} />

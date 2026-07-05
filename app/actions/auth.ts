@@ -4,8 +4,10 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { generateSecret, generateURI, verifySync } from 'otplib'
 import { getServerSession } from 'next-auth'
+import { headers } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { verifyTurnstileToken } from '@/lib/turnstile'
 
 const registerSchema = z.object({
   name: z.string().min(2),
@@ -14,6 +16,20 @@ const registerSchema = z.object({
 })
 
 export async function registerUser(formData: FormData) {
+  const turnstileToken = formData.get('turnstileToken')
+  if (!turnstileToken || typeof turnstileToken !== 'string') {
+    return { error: 'Complete a verificação de segurança antes de continuar.' }
+  }
+
+  const headersList = await headers()
+  const ip = headersList.get('CF-Connecting-IP') ??
+             headersList.get('X-Forwarded-For')?.split(',')[0].trim() ??
+             undefined
+  const turnstileOk = await verifyTurnstileToken(turnstileToken, ip)
+  if (!turnstileOk) {
+    return { error: 'Verificação de segurança falhou. Tente novamente.' }
+  }
+
   const raw = {
     name: formData.get('name'),
     email: formData.get('email'),

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,10 +17,39 @@ export default function RegistroForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Turnstile state — mesma lógica de app/login/login-form.tsx: token
+  // efêmero, verificado server-side dentro da própria Server Action.
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileError, setTurnstileError] = useState(false)
+  const turnstileRef = useRef<TurnstileInstance>(undefined)
+
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ''
+
+  const handleTurnstileSuccess = useCallback((token: string) => {
+    setTurnstileToken(token)
+    setTurnstileError(false)
+  }, [])
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken(null)
+    setTurnstileError(true)
+  }, [])
+
+  const resetTurnstile = useCallback(() => {
+    setTurnstileToken(null)
+    turnstileRef.current?.reset()
+  }, [])
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setLoading(true)
     setError(null)
+
+    if (!turnstileToken) {
+      setError('Complete a verificação de segurança antes de continuar.')
+      return
+    }
+
+    setLoading(true)
 
     const formData = new FormData(e.currentTarget)
     const password = formData.get('password') as string
@@ -37,8 +67,10 @@ export default function RegistroForm() {
       return
     }
 
+    formData.set('turnstileToken', turnstileToken)
     const result = await registerUser(formData)
     setLoading(false)
+    resetTurnstile() // Token de uso único — redefine após cada tentativa
 
     if (result.error) {
       setError(result.error)
@@ -100,18 +132,65 @@ export default function RegistroForm() {
                 autoComplete="new-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            {/* Cloudflare Turnstile — Privacy by Design (mesma lógica do login) */}
+            <div className="flex flex-col items-center gap-1">
+              {siteKey ? (
+                <div className="w-full flex justify-center">
+                  <Turnstile
+                    ref={turnstileRef}
+                    siteKey={siteKey}
+                    onSuccess={handleTurnstileSuccess}
+                    onError={handleTurnstileError}
+                    onExpire={resetTurnstile}
+                    options={{
+                      theme: 'light',
+                      language: 'pt-BR',
+                      appearance: 'always',
+                    }}
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-amber-600 text-center">
+                  Configure <code>NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> para ativar a verificação de segurança
+                </p>
+              )}
+              {turnstileError && (
+                <p className="text-xs text-red-600">
+                  Falha na verificação. Recarregue a página.
+                </p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || (!!siteKey && !turnstileToken)}
+            >
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Criar conta
             </Button>
           </form>
         </CardContent>
 
-        <CardFooter className="text-sm text-center text-muted-foreground">
-          Já tem conta?{' '}
-          <Link href="/login" className="text-blue-600 hover:underline ml-1">
-            Entrar
-          </Link>
+        <CardFooter className="flex flex-col gap-2 text-center">
+          <p className="text-sm text-muted-foreground">
+            Já tem conta?{' '}
+            <Link href="/login" className="text-blue-600 hover:underline ml-1">
+              Entrar
+            </Link>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Protegido por{' '}
+            <a
+              href="https://www.cloudflare.com/products/turnstile/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Cloudflare Turnstile
+            </a>{' '}
+            — sem cookies de rastreamento
+          </p>
         </CardFooter>
       </Card>
     </div>
