@@ -14,6 +14,7 @@
 import { createHash } from 'crypto'
 import { headers } from 'next/headers'
 import { db } from '@/lib/db'
+import { logger, maskSensitive } from '@/lib/logger'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -90,21 +91,11 @@ export interface AuditParams {
 }
 
 // ─── Campos sensíveis a mascarar (Privacy by Design) ─────────────────────────
-
-const SENSITIVE_KEYS = [
-  'password', 'passwordhash', 'mfasecret', 'token', 'resettoken',
-  'senha', 'secret', 'hash', 'key', 'pass',
-]
-
-function maskSensitive(data: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
-  if (!data) return null
-  return Object.fromEntries(
-    Object.entries(data).map(([k, v]) => [
-      k,
-      SENSITIVE_KEYS.some((s) => k.toLowerCase().includes(s)) ? '[REDACTED]' : v,
-    ]),
-  )
-}
+//
+// maskSensitive() vem de lib/logger.ts (fonte única, compartilhada com o
+// logger técnico). Importante: ela deliberadamente NÃO mascara chaves como
+// "hash"/"key" isoladas — hashSha256/hashIntegridade são o núcleo probatório
+// do dossiê e da cadeia de integridade deste log, não segredos.
 
 // ─── Captura de contexto HTTP (Server Actions) ────────────────────────────────
 
@@ -117,7 +108,10 @@ async function captureHttpContext(): Promise<{ ipAddress: string | null; userAge
       null
     const ua = hdrs.get('user-agent') ?? null
     return { ipAddress: ip, userAgent: ua }
-  } catch {
+  } catch (err) {
+    // Comum e esperado fora do escopo de uma requisição HTTP (ex.: script/seed
+    // chamando logAudit diretamente) — por isso "debug", não "warn"/"error".
+    logger.debug({ err }, 'captureHttpContext: sem contexto de requisição HTTP disponível')
     return { ipAddress: null, userAgent: null }
   }
 }
@@ -153,24 +147,48 @@ export async function logAudit(params: AuditParams): Promise<void> {
     const ipAddress = params.ipAddress ?? httpCtx.ipAddress
     const userAgent = params.userAgent ?? httpCtx.userAgent
 
-    // Dados do usuário para desnormalização (resiliente a exclusão futura)
+    // Dados do usuário para desnormalização (resiliente a exclusão futura).
+    // Falha aqui é só perda de qualidade do dado (userEmail/userName ficam
+    // null) — não compromete a cadeia de integridade, por isso ainda segue
+    // em frente, mas agora com log em vez de silêncio total.
     let userEmail: string | null = null
     let userName: string | null = null
     if (params.userId) {
       const user = await db.user.findUnique({
         where: { id: params.userId },
         select: { email: true, name: true },
-      }).catch(() => null)
+      }).catch((err) => {
+        logger.warn(
+          { err, userId: params.userId },
+          'Falha ao buscar dados do usuário para desnormalização no log de auditoria',
+        )
+        return null
+      })
       userEmail = user?.email ?? null
       userName = user?.name ?? null
     }
 
-    // Hash do último registro da serventia (ou global) para a cadeia
-    const lastEntry = await db.auditLog.findFirst({
-      where: params.serventiaId ? { serventiaId: params.serventiaId } : {},
-      orderBy: { timestamp: 'desc' },
-      select: { hashIntegridade: true },
-    }).catch(() => null)
+    // Hash do último registro da serventia (ou global) para a cadeia. Aqui a
+    // distinção importa: "sem registro anterior" (findFirst resolve com
+    // null) é o caso legítimo de genesis da cadeia; uma falha de consulta
+    // (exceção) é diferente e NÃO pode ser tratada como se fosse genesis —
+    // isso reiniciaria a cadeia de hash silenciosamente e invalidaria a
+    // garantia de tamper-evidence. Por isso aborta o registro deste evento
+    // em vez de prosseguir com um prevHash errado.
+    let lastEntry: { hashIntegridade: string | null } | null
+    try {
+      lastEntry = await db.auditLog.findFirst({
+        where: params.serventiaId ? { serventiaId: params.serventiaId } : {},
+        orderBy: { timestamp: 'desc' },
+        select: { hashIntegridade: true },
+      })
+    } catch (err) {
+      logger.error(
+        { err, acao: params.acao, entidade: params.entidade, serventiaId: params.serventiaId },
+        'Falha ao buscar hash anterior da cadeia de auditoria — evento descartado para não corromper a cadeia de integridade',
+      )
+      return
+    }
 
     const prevHash = lastEntry?.hashIntegridade ?? GENESIS_HASH
     const timestamp = new Date()
@@ -201,8 +219,18 @@ export async function logAudit(params: AuditParams): Promise<void> {
       },
     })
   } catch (err) {
-    // Auditoria nunca bloqueia o fluxo principal — registra no stderr
-    console.error('[AUDIT] Falha ao registrar evento:', params.acao, err)
+    // Auditoria nunca bloqueia o fluxo principal — registra no log técnico
+    logger.error(
+      {
+        err,
+        acao: params.acao,
+        entidade: params.entidade,
+        entidadeId: params.entidadeId,
+        userId: params.userId,
+        serventiaId: params.serventiaId,
+      },
+      'Falha ao registrar evento de auditoria',
+    )
   }
 }
 

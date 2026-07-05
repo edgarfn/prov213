@@ -37,13 +37,34 @@ function hasServentiaContext(req: NextRequest) {
   return !!req.cookies.get(SERVENTIA_COOKIE)?.value
 }
 
+const REQUEST_ID_HEADER = 'x-request-id'
+
+/**
+ * Propaga um x-request-id por requisição — para o próprio request (via
+ * next/headers dentro de Route Handlers/Server Actions) e para o cliente
+ * (útil para correlacionar um erro relatado pelo usuário com os logs do
+ * servidor). Se o cliente já enviar o header, ele é preservado (permite
+ * correlação ponta a ponta com um proxy/CDN na frente).
+ */
+function withRequestId(response: NextResponse, requestId: string) {
+  response.headers.set(REQUEST_ID_HEADER, requestId)
+  return response
+}
+
+function nextWithRequestId(request: NextRequest, requestId: string) {
+  const forwardedHeaders = new Headers(request.headers)
+  forwardedHeaders.set(REQUEST_ID_HEADER, requestId)
+  return withRequestId(NextResponse.next({ request: { headers: forwardedHeaders } }), requestId)
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const requestId = request.headers.get(REQUEST_ID_HEADER) ?? crypto.randomUUID()
 
   const isAuthOnly = AUTH_ONLY.some((p) => pathname.startsWith(p))
   const isProtected = PROTECTED.some((p) => pathname.startsWith(p))
 
-  if (!isAuthOnly && !isProtected) return NextResponse.next()
+  if (!isAuthOnly && !isProtected) return nextWithRequestId(request, requestId)
 
   // 1. Verificar sessão (autenticação)
   if (!hasSession(request)) {
@@ -51,43 +72,32 @@ export function proxy(request: NextRequest) {
     if (!pathname.startsWith('/api/')) {
       loginUrl.searchParams.set('callbackUrl', pathname)
     }
-    return NextResponse.redirect(loginUrl)
+    return withRequestId(NextResponse.redirect(loginUrl), requestId)
   }
 
   // 2. Rotas auth-only não precisam de serventia
-  if (isAuthOnly) return NextResponse.next()
+  if (isAuthOnly) return nextWithRequestId(request, requestId)
 
   // 3. Rotas protegidas: verificar contexto de serventia
   if (!hasServentiaContext(request)) {
     // Redireciona para seletor (ou auto-select) — AppLayout resolve o caso de 1 serventia
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'Nenhuma serventia selecionada', code: 'NO_SERVENTIA_CONTEXT' },
-        { status: 403 },
+      return withRequestId(
+        NextResponse.json(
+          { error: 'Nenhuma serventia selecionada', code: 'NO_SERVENTIA_CONTEXT' },
+          { status: 403 },
+        ),
+        requestId,
       )
     }
-    return NextResponse.redirect(absoluteUrl('/selecionar-serventia'))
+    return withRequestId(NextResponse.redirect(absoluteUrl('/selecionar-serventia')), requestId)
   }
 
-  return NextResponse.next()
+  return nextWithRequestId(request, requestId)
 }
 
 export const config = {
   matcher: [
-    '/dashboard/:path*',
-    '/checklists/:path*',
-    '/evidencias/:path*',
-    '/configuracoes/:path*',
-    '/onboarding/:path*',
-    '/alterar-senha',
-    '/selecionar-serventia',
-    '/api/backup/:path*',
-    '/api/auditoria/:path*',
-    '/api/evidencias/:path*',
-    '/api/usuarios/:path*',
-    '/api/usuario/serventias',
-    '/api/auth/select-serventia',
-    '/api/auth/auto-select',
-    '/api/auth/change-password',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }

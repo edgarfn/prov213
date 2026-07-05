@@ -18,6 +18,11 @@ import { readdir, readFile, writeFile, unlink, mkdir } from 'fs/promises'
 import path from 'path'
 import JSZip from 'jszip'
 import { db } from '@/lib/db'
+import { logger } from '@/lib/logger'
+
+function isEnoent(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException)?.code === 'ENOENT'
+}
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -175,8 +180,11 @@ async function collectFiles(
         files.set(`files/${serventiaId}/${reqId}/${fname}`, buf)
       }
     }
-  } catch {
-    // Sem arquivos ainda — normal
+  } catch (err) {
+    if (!isEnoent(err)) {
+      logger.warn({ err, serventiaId }, 'Falha ao coletar arquivos de evidência para o backup')
+    }
+    // ENOENT (diretório ainda não existe) é o caso normal — sem arquivos ainda
   }
 
   return files
@@ -295,7 +303,10 @@ export async function listBackups(serventiaId?: string): Promise<BackupManifest[
     return manifests.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
-  } catch {
+  } catch (err) {
+    if (!isEnoent(err)) {
+      logger.warn({ err, serventiaId }, 'Falha ao listar backups')
+    }
     return []
   }
 }
@@ -532,6 +543,20 @@ export async function restoreBackup(opts: RestoreBackupOptions): Promise<Restore
 
 // ─── Exclusão ─────────────────────────────────────────────────────────────────
 
+/**
+ * Remove um arquivo, tolerando apenas "já não existe" (ENOENT). Qualquer
+ * outro erro (ex.: permissão negada no volume) é relançado — deleteBackup
+ * não pode gravar BACKUP_EXCLUIDO no audit log se o arquivo não foi de fato
+ * excluído, ou o log de auditoria passa a mentir sobre o que aconteceu.
+ */
+async function unlinkIfExists(filepath: string): Promise<void> {
+  try {
+    await unlink(filepath)
+  } catch (err) {
+    if (!isEnoent(err)) throw err
+  }
+}
+
 export async function deleteBackup(
   filename: string,
   userId: string,
@@ -540,8 +565,8 @@ export async function deleteBackup(
   const safe = path.basename(filename)
   if (safe !== filename) throw new Error('Nome de arquivo inválido')
 
-  await unlink(path.join(BACKUP_DIR, safe)).catch(() => {})
-  await unlink(path.join(BACKUP_DIR, `${safe}.manifest.json`)).catch(() => {})
+  await unlinkIfExists(path.join(BACKUP_DIR, safe))
+  await unlinkIfExists(path.join(BACKUP_DIR, `${safe}.manifest.json`))
 
   await db.auditLog.create({
     data: {

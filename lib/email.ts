@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { logger } from '@/lib/logger'
 
 function createTransport() {
   const host = process.env.SMTP_HOST
@@ -41,12 +42,19 @@ export async function sendPasswordResetEmail(
 
   const transport = createTransport()
   if (!transport) {
-    // Sem SMTP configurado — exibe no console para dev/testes
-    console.log('\n════════════════════════════════════════')
-    console.log(' [EMAIL] Reset de senha (sem SMTP configurado)')
-    console.log(` Para: ${toEmail}`)
-    console.log(` Link: ${link}`)
-    console.log('════════════════════════════════════════\n')
+    if (process.env.NODE_ENV === 'production') {
+      // NUNCA imprimir o link (contém o token de reset) em produção — se
+      // SMTP não está configurado, isso é uma falha operacional a corrigir,
+      // não um motivo para vazar o segredo em texto puro no log.
+      logger.error(
+        { toEmail },
+        'SMTP não configurado em produção — e-mail de redefinição de senha NÃO enviado. Configure SMTP_HOST.',
+      )
+      return
+    }
+    // Fallback só de desenvolvimento: mostra o link para permitir testar o
+    // fluxo sem servidor SMTP local. Gate acima garante que nunca roda em produção.
+    logger.debug({ toEmail, link }, '[DEV] E-mail de redefinição de senha (sem SMTP configurado)')
     return
   }
 
@@ -80,10 +88,17 @@ export async function sendWelcomeEmail(
 
   const transport = createTransport()
   if (!transport) {
-    console.log('\n════════════════════════════════════════')
-    console.log(' [EMAIL] Boas-vindas (sem SMTP configurado)')
-    console.log(` Para: ${toEmail} | Senha: ${tempPassword}`)
-    console.log('════════════════════════════════════════\n')
+    if (process.env.NODE_ENV === 'production') {
+      // NUNCA imprimir a senha provisória em produção pelo mesmo motivo do
+      // fallback de reset de senha acima — falta de SMTP é bug operacional,
+      // não licença para vazar credencial em texto puro no log.
+      logger.error(
+        { toEmail },
+        'SMTP não configurado em produção — e-mail de boas-vindas NÃO enviado. Configure SMTP_HOST.',
+      )
+      return
+    }
+    logger.debug({ toEmail, tempPassword }, '[DEV] E-mail de boas-vindas (sem SMTP configurado)')
     return
   }
 

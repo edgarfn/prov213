@@ -1,6 +1,7 @@
 import { PrismaClient } from '../app/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
+import { logger } from '@/lib/logger'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient
@@ -16,9 +17,11 @@ function getOrCreatePool(): Pool {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
   })
-  // Loga erros inesperados do pool sem travar a aplicação
+  // Loga erros inesperados do pool sem travar a aplicação. "fatal": uma
+  // conexão de pool morta silenciosamente é o tipo de falha que só aparece
+  // depois, como erros 500 aparentemente aleatórios, se não for logada alto.
   pool.on('error', (err) => {
-    console.error('[DB Pool] Erro inesperado:', err.message)
+    logger.fatal({ err }, 'Erro inesperado no pool de conexões com o banco')
   })
   globalForPrisma.pgPool = pool
   return pool

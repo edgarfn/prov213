@@ -1,3 +1,5 @@
+import { logger } from '@/lib/logger'
+
 const CLOUDFLARE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 
 interface TurnstileVerifyResponse {
@@ -19,7 +21,7 @@ export async function verifyTurnstileToken(token: string, ip?: string): Promise<
   const secretKey = process.env.TURNSTILE_SECRET_KEY
   if (!secretKey) {
     // Dev fallback sem secret key configurada — nunca acontece em produção
-    console.warn('[Turnstile] TURNSTILE_SECRET_KEY não configurada')
+    logger.warn('TURNSTILE_SECRET_KEY não configurada — verificação ignorada (esperado apenas em dev)')
     return true
   }
 
@@ -36,22 +38,25 @@ export async function verifyTurnstileToken(token: string, ip?: string): Promise<
     })
 
     if (!cfRes.ok) {
-      console.error('[Turnstile] siteverify HTTP error:', cfRes.status, await cfRes.text())
+      logger.error(
+        { status: cfRes.status, body: await cfRes.text() },
+        'Turnstile: siteverify retornou erro HTTP',
+      )
       return false
     }
 
     const data: TurnstileVerifyResponse = await cfRes.json()
     if (!data.success) {
-      console.error(
-        '[Turnstile] siteverify falhou:',
-        JSON.stringify({ errorCodes: data['error-codes'], hostname: data.hostname }),
+      logger.warn(
+        { errorCodes: data['error-codes'], hostname: data.hostname },
+        'Turnstile: siteverify falhou',
       )
       return false
     }
 
     return true
   } catch (err) {
-    console.error('[Turnstile] Verification error:', err)
+    logger.error({ err }, 'Turnstile: erro ao verificar token')
     return false
   }
 }

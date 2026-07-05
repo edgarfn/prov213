@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 import { prazoVulnerabilidade } from '@/lib/business-rules'
+import { runLogged } from '@/lib/logger'
 
 const CLASSIFICACOES = ['BAIXO', 'MEDIO', 'ALTO', 'CRITICO'] as const
 const ORIGENS = [
@@ -67,8 +68,9 @@ async function validarResponsavel(responsavelId: string | null | undefined, serv
 export async function criarVulnerabilidade(serventiaId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão para registrar vulnerabilidades' }
 
   const raw = Object.fromEntries(formData.entries())
@@ -81,21 +83,26 @@ export async function criarVulnerabilidade(serventiaId: string, formData: FormDa
 
   const prazoLimite = prazoVulnerabilidade(parsed.data.dataIdentificacao, parsed.data.exploracaoAtiva)
 
-  const vulnerabilidade = await db.vulnerabilidade.create({
-    data: { serventiaId, ...parsed.data, prazoLimite },
-  })
+  const result = await runLogged('criarVulnerabilidade', { userId, serventiaId }, async () => {
+    const vulnerabilidade = await db.vulnerabilidade.create({
+      data: { serventiaId, ...parsed.data, prazoLimite },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'VULNERABILIDADE_CRIADA',
-    entidade: 'Vulnerabilidade',
-    entidadeId: vulnerabilidade.id,
-    valorNovo: { classificacaoRisco: vulnerabilidade.classificacaoRisco, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'VULNERABILIDADE_CRIADA',
+      entidade: 'Vulnerabilidade',
+      entidadeId: vulnerabilidade.id,
+      valorNovo: { classificacaoRisco: vulnerabilidade.classificacaoRisco, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
+    })
+
+    return vulnerabilidade
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/vulnerabilidades')
-  return { success: true, id: vulnerabilidade.id }
+  return { success: true, id: result.value.id }
 }
 
 const atualizacaoSchema = z.object({
@@ -114,8 +121,9 @@ const atualizacaoSchema = z.object({
 export async function atualizarVulnerabilidade(serventiaId: string, vulnerabilidadeId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão' }
 
   const raw = Object.fromEntries(formData.entries())
@@ -149,33 +157,36 @@ export async function atualizarVulnerabilidade(serventiaId: string, vulnerabilid
       ? prazoVulnerabilidade(anterior.dataIdentificacao, exploracaoAtiva)
       : anterior.prazoLimite
 
-  const vulnerabilidade = await db.vulnerabilidade.update({
-    where: { id: vulnerabilidadeId },
-    data: {
-      status: novoStatus,
-      classificacaoRisco: parsed.data.classificacaoRisco ?? anterior.classificacaoRisco,
-      origem: parsed.data.origem ?? anterior.origem,
-      ativoAfetado: parsed.data.ativoAfetado ?? anterior.ativoAfetado,
-      cveReferencia: parsed.data.cveReferencia ?? anterior.cveReferencia,
-      cvssScore: parsed.data.cvssScore ?? anterior.cvssScore,
-      responsavelId: parsed.data.responsavelId !== undefined ? parsed.data.responsavelId : anterior.responsavelId,
-      exploracaoAtiva,
-      prazoLimite,
-      providencias: parsed.data.providencias ?? anterior.providencias,
-      justificativaRiscoAceito: parsed.data.justificativaRiscoAceito ?? anterior.justificativaRiscoAceito,
-      dataEncerramento: indoParaTerminal ? (anterior.dataEncerramento ?? new Date()) : null,
-    },
-  })
+  const result = await runLogged('atualizarVulnerabilidade', { userId, serventiaId, vulnerabilidadeId }, async () => {
+    const vulnerabilidade = await db.vulnerabilidade.update({
+      where: { id: vulnerabilidadeId },
+      data: {
+        status: novoStatus,
+        classificacaoRisco: parsed.data.classificacaoRisco ?? anterior.classificacaoRisco,
+        origem: parsed.data.origem ?? anterior.origem,
+        ativoAfetado: parsed.data.ativoAfetado ?? anterior.ativoAfetado,
+        cveReferencia: parsed.data.cveReferencia ?? anterior.cveReferencia,
+        cvssScore: parsed.data.cvssScore ?? anterior.cvssScore,
+        responsavelId: parsed.data.responsavelId !== undefined ? parsed.data.responsavelId : anterior.responsavelId,
+        exploracaoAtiva,
+        prazoLimite,
+        providencias: parsed.data.providencias ?? anterior.providencias,
+        justificativaRiscoAceito: parsed.data.justificativaRiscoAceito ?? anterior.justificativaRiscoAceito,
+        dataEncerramento: indoParaTerminal ? (anterior.dataEncerramento ?? new Date()) : null,
+      },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: indoParaTerminal ? 'VULNERABILIDADE_ENCERRADA' : 'VULNERABILIDADE_ATUALIZADA',
-    entidade: 'Vulnerabilidade',
-    entidadeId: vulnerabilidade.id,
-    valorAnterior: { status: anterior.status, exploracaoAtiva: anterior.exploracaoAtiva },
-    valorNovo: { status: vulnerabilidade.status, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: indoParaTerminal ? 'VULNERABILIDADE_ENCERRADA' : 'VULNERABILIDADE_ATUALIZADA',
+      entidade: 'Vulnerabilidade',
+      entidadeId: vulnerabilidade.id,
+      valorAnterior: { status: anterior.status, exploracaoAtiva: anterior.exploracaoAtiva },
+      valorNovo: { status: vulnerabilidade.status, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/vulnerabilidades')
   return { success: true }

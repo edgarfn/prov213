@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
+import { runLogged } from '@/lib/logger'
 
 const CATEGORIAS = [
   'ACESSO_NAO_AUTORIZADO', 'MALWARE_RANSOMWARE', 'VAZAMENTO_DADOS',
@@ -66,8 +67,9 @@ async function validarResponsavel(responsavelId: string | null | undefined, serv
 export async function criarIncidente(serventiaId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão para registrar incidentes' }
 
   const raw = Object.fromEntries(formData.entries())
@@ -78,21 +80,26 @@ export async function criarIncidente(serventiaId: string, formData: FormData) {
     return { error: 'Responsável selecionado não pertence a esta serventia.' }
   }
 
-  const incidente = await db.incidente.create({
-    data: { serventiaId, ...parsed.data },
-  })
+  const result = await runLogged('criarIncidente', { userId, serventiaId }, async () => {
+    const incidente = await db.incidente.create({
+      data: { serventiaId, ...parsed.data },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'INCIDENTE_CRIADO',
-    entidade: 'Incidente',
-    entidadeId: incidente.id,
-    valorNovo: { titulo: incidente.titulo, gravidade: incidente.gravidade },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'INCIDENTE_CRIADO',
+      entidade: 'Incidente',
+      entidadeId: incidente.id,
+      valorNovo: { titulo: incidente.titulo, gravidade: incidente.gravidade },
+    })
+
+    return incidente
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/incidentes')
-  return { success: true, id: incidente.id }
+  return { success: true, id: result.value.id }
 }
 
 const atualizacaoSchema = z.object({
@@ -110,8 +117,9 @@ const atualizacaoSchema = z.object({
 export async function atualizarIncidente(serventiaId: string, incidenteId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão' }
 
   const raw = Object.fromEntries(formData.entries())
@@ -135,20 +143,23 @@ export async function atualizarIncidente(serventiaId: string, incidenteId: strin
     }
   }
 
-  const incidente = await db.incidente.update({
-    where: { id: incidenteId },
-    data: parsed.data,
-  })
+  const result = await runLogged('atualizarIncidente', { userId, serventiaId, incidenteId }, async () => {
+    const incidente = await db.incidente.update({
+      where: { id: incidenteId },
+      data: parsed.data,
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: incidente.status === 'ENCERRADO' ? 'INCIDENTE_ENCERRADO' : 'INCIDENTE_ATUALIZADO',
-    entidade: 'Incidente',
-    entidadeId: incidente.id,
-    valorAnterior: { status: anterior.status },
-    valorNovo: { status: incidente.status },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: incidente.status === 'ENCERRADO' ? 'INCIDENTE_ENCERRADO' : 'INCIDENTE_ATUALIZADO',
+      entidade: 'Incidente',
+      entidadeId: incidente.id,
+      valorAnterior: { status: anterior.status },
+      valorNovo: { status: incidente.status },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/incidentes')
   return { success: true }
@@ -161,23 +172,27 @@ export async function atualizarIncidente(serventiaId: string, incidenteId: strin
 export async function comunicarCorregedoria(serventiaId: string, incidenteId: string) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão' }
 
-  const incidente = await db.incidente.update({
-    where: { id: incidenteId },
-    data: { comunicadoCorregedoria: true, dataComunicacao: new Date() },
-  })
+  const result = await runLogged('comunicarCorregedoria', { userId, serventiaId, incidenteId }, async () => {
+    const incidente = await db.incidente.update({
+      where: { id: incidenteId },
+      data: { comunicadoCorregedoria: true, dataComunicacao: new Date() },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'INCIDENTE_COMUNICADO_CORREGEDORIA',
-    entidade: 'Incidente',
-    entidadeId: incidente.id,
-    valorNovo: { dataComunicacao: incidente.dataComunicacao },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'INCIDENTE_COMUNICADO_CORREGEDORIA',
+      entidade: 'Incidente',
+      entidadeId: incidente.id,
+      valorNovo: { dataComunicacao: incidente.dataComunicacao },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/incidentes')
   return { success: true }
@@ -187,22 +202,26 @@ export async function comunicarCorregedoria(serventiaId: string, incidenteId: st
 export async function comunicarAnpd(serventiaId: string, incidenteId: string) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão' }
 
-  const incidente = await db.incidente.update({
-    where: { id: incidenteId },
-    data: { comunicadoAnpd: true },
-  })
+  const result = await runLogged('comunicarAnpd', { userId, serventiaId, incidenteId }, async () => {
+    const incidente = await db.incidente.update({
+      where: { id: incidenteId },
+      data: { comunicadoAnpd: true },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'INCIDENTE_COMUNICADO_ANPD',
-    entidade: 'Incidente',
-    entidadeId: incidente.id,
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'INCIDENTE_COMUNICADO_ANPD',
+      entidade: 'Incidente',
+      entidadeId: incidente.id,
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/incidentes')
   return { success: true }

@@ -9,6 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { Prisma } from '@/app/generated/prisma/client'
 import { verifyTurnstileToken } from '@/lib/turnstile'
+import { getLogger } from '@/lib/logger'
 
 const registerSchema = z.object({
   name: z.string().min(2),
@@ -90,7 +91,8 @@ export async function registerUser(formData: FormData) {
 
       const err = e instanceof Error ? e : new Error(String(e))
       // Log no servidor para diagnóstico — não expõe detalhes ao cliente
-      console.error('[registerUser] Erro:', err.message)
+      const log = await getLogger({ action: 'registerUser', tentativa })
+      log.error({ err }, 'Falha ao registrar novo usuário')
       return {
         error:
           process.env.NODE_ENV === 'development'

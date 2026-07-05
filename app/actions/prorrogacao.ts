@@ -9,6 +9,7 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 import { TIPO_PRAZO_ETAPAS_1_2 } from '@/lib/prorrogacao'
+import { runLogged } from '@/lib/logger'
 
 const solicitarSchema = z
   .object({
@@ -38,8 +39,9 @@ const solicitarSchema = z
 export async function solicitarProrrogacao(serventiaId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await requireServentiaMembro(session.user.id, serventiaId)
+  const membro = await requireServentiaMembro(userId, serventiaId)
   if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
     return { error: 'Apenas Titular ou Responsável Técnico podem solicitar prorrogação' }
   }
@@ -71,27 +73,30 @@ export async function solicitarProrrogacao(serventiaId: string, formData: FormDa
     return { error: 'Já existe uma solicitação de prorrogação pendente de decisão' }
   }
 
-  const prorrogacao = await db.prorrogacao.create({
-    data: {
-      serventiaId,
-      tipoPrazo: TIPO_PRAZO_ETAPAS_1_2,
-      dataOriginal: parsed.data.dataOriginal,
-      dataSolicitada: parsed.data.dataSolicitada,
-      fluxo,
-      justificativa: parsed.data.justificativa,
-      elementosProbatorios: parsed.data.elementosProbatorios,
-      solicitadoPor: session.user.name ?? session.user.email ?? '',
-    },
-  })
+  const result = await runLogged('solicitarProrrogacao', { userId, serventiaId }, async () => {
+    const prorrogacao = await db.prorrogacao.create({
+      data: {
+        serventiaId,
+        tipoPrazo: TIPO_PRAZO_ETAPAS_1_2,
+        dataOriginal: parsed.data.dataOriginal,
+        dataSolicitada: parsed.data.dataSolicitada,
+        fluxo,
+        justificativa: parsed.data.justificativa,
+        elementosProbatorios: parsed.data.elementosProbatorios,
+        solicitadoPor: session.user.name ?? session.user.email ?? '',
+      },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'PRORROGACAO_SOLICITADA',
-    entidade: 'Prorrogacao',
-    entidadeId: prorrogacao.id,
-    valorNovo: { dataOriginal: parsed.data.dataOriginal, dataSolicitada: parsed.data.dataSolicitada, fluxo },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'PRORROGACAO_SOLICITADA',
+      entidade: 'Prorrogacao',
+      entidadeId: prorrogacao.id,
+      valorNovo: { dataOriginal: parsed.data.dataOriginal, dataSolicitada: parsed.data.dataSolicitada, fluxo },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/configuracoes')
   return { success: true }
@@ -115,8 +120,9 @@ export async function decidirProrrogacao(
 ) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await requireServentiaMembro(session.user.id, serventiaId)
+  const membro = await requireServentiaMembro(userId, serventiaId)
   if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
     return { error: 'Apenas Titular ou Responsável Técnico podem registrar a decisão' }
   }
@@ -129,24 +135,27 @@ export async function decidirProrrogacao(
   if (!prorrogacao) return { error: 'Solicitação de prorrogação não encontrada' }
   if (prorrogacao.status !== 'SOLICITADA') return { error: 'Esta solicitação já foi decidida' }
 
-  await db.prorrogacao.update({
-    where: { id: prorrogacaoId },
-    data: {
-      status: parsed.data.decisao,
-      decididoPor: parsed.data.decididoPor,
-      dataDecisao: new Date(),
-      observacoesDecisao: parsed.data.observacoesDecisao,
-    },
-  })
+  const result = await runLogged('decidirProrrogacao', { userId, serventiaId, prorrogacaoId }, async () => {
+    await db.prorrogacao.update({
+      where: { id: prorrogacaoId },
+      data: {
+        status: parsed.data.decisao,
+        decididoPor: parsed.data.decididoPor,
+        dataDecisao: new Date(),
+        observacoesDecisao: parsed.data.observacoesDecisao,
+      },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'PRORROGACAO_DECIDIDA',
-    entidade: 'Prorrogacao',
-    entidadeId: prorrogacaoId,
-    valorNovo: { decisao: parsed.data.decisao, decididoPor: parsed.data.decididoPor },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'PRORROGACAO_DECIDIDA',
+      entidade: 'Prorrogacao',
+      entidadeId: prorrogacaoId,
+      valorNovo: { decisao: parsed.data.decisao, decididoPor: parsed.data.decididoPor },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/configuracoes')
   return { success: true }

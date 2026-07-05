@@ -7,6 +7,7 @@ import { db } from '@/lib/db'
 import { getValidatedMembro } from '@/lib/serventia-context'
 import { sendWelcomeEmail } from '@/lib/email'
 import { logAudit } from '@/lib/audit'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -90,8 +91,13 @@ export async function POST(req: NextRequest) {
     data: { userId: user.id, serventiaId, papel: body.papel as never, ativo: true },
   })
 
-  // Envia e-mail de boas-vindas (ou loga no console)
-  await sendWelcomeEmail(emailNorm, tempPassword).catch(console.error)
+  // Envia e-mail de boas-vindas (ou loga no console). Falha aqui não desfaz
+  // a criação do usuário — a senha provisória continua válida, só o e-mail
+  // de aviso não chegou (o Titular pode repassar as credenciais manualmente).
+  await sendWelcomeEmail(emailNorm, tempPassword).catch(async (err) => {
+    const log = await getLogger({ userId: session.user.id, serventiaId, action: 'criar_usuario' })
+    log.warn({ err, novoUsuarioId: user.id }, 'Falha ao enviar e-mail de boas-vindas')
+  })
 
   await logAudit({
     serventiaId,

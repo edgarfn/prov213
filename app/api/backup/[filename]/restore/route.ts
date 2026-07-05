@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { restoreBackup } from '@/lib/backup'
 import { getValidatedMembro } from '@/lib/serventia-context'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -51,7 +52,8 @@ export async function POST(
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro ao restaurar backup'
     const status = msg.includes('senha') || msg.includes('autenticação') ? 401 : 500
-    console.error('[Backup] Erro na restauração:', msg)
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'restaurar_backup' })
+    log.error({ filename, err: e }, 'Falha ao restaurar backup')
     return NextResponse.json({ error: msg }, { status })
   }
 }

@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { getBackupPlaintext, deleteBackup } from '@/lib/backup'
 import { getValidatedMembro } from '@/lib/serventia-context'
 import { logAudit } from '@/lib/audit'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -56,6 +57,12 @@ export async function POST(
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro no download'
     const status = msg.includes('senha') || msg.includes('autenticação') ? 401 : 500
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'download_backup' })
+    if (status === 401) {
+      log.warn({ filename, err: e }, 'Tentativa de download de backup com frase-senha incorreta')
+    } else {
+      log.error({ filename, err: e }, 'Falha ao processar download de backup')
+    }
     return NextResponse.json({ error: msg }, { status })
   }
 }
@@ -82,6 +89,8 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro ao excluir'
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'excluir_backup' })
+    log.error({ filename, err: e }, 'Falha ao excluir backup')
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

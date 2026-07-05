@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { getValidatedMembro } from '@/lib/serventia-context'
 import { logAudit } from '@/lib/audit'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -85,8 +86,13 @@ export async function GET(
   })
 
   if (!integro) {
-    // Loga a falha mas ainda serve o arquivo (o auditor decide o que fazer)
-    console.error(`[EVIDENCIA] Falha de integridade: ${id} esperado=${ev.hashSha256} atual=${hashAtual}`)
+    // Loga a falha mas ainda serve o arquivo (o auditor decide o que fazer) —
+    // possível indício de adulteração do arquivo em disco, merece atenção operacional
+    const log = await getLogger({ userId: session.user.id, serventiaId, action: 'download_evidencia' })
+    log.error(
+      { evidenciaId: id, hashEsperado: ev.hashSha256, hashAtual },
+      'Falha de integridade detectada no download de evidência',
+    )
   }
 
   // Detecta Content-Type pela extensão

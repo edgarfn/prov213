@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
+import { runLogged } from '@/lib/logger'
 
 async function garantirPodeEditar(userId: string, serventiaId: string) {
   const membro = await requireServentiaMembro(userId, serventiaId)
@@ -62,8 +63,9 @@ function calcularConformidade(input: {
 export async function criarTesteRestauracao(serventiaId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão para registrar testes de restauração' }
 
   const raw = Object.fromEntries(formData.entries())
@@ -72,33 +74,38 @@ export async function criarTesteRestauracao(serventiaId: string, formData: FormD
 
   const conformidade = calcularConformidade(parsed.data)
 
-  const teste = await db.testeRestauracao.create({
-    data: {
-      serventiaId,
-      dataTeste: parsed.data.dataTeste,
-      sistemasRestaurados: parsed.data.sistemasRestaurados,
-      rtoDefinido: parsed.data.rtoDefinido,
-      rtoAferido: parsed.data.rtoAferido,
-      rpoDefinido: parsed.data.rpoDefinido,
-      rpoAferido: parsed.data.rpoAferido,
-      conformidade,
-      participantes: parsed.data.participantes,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      arquiteturaBackup: parsed.data.arquiteturaBackup as any,
-    },
-  })
+  const result = await runLogged('criarTesteRestauracao', { userId, serventiaId }, async () => {
+    const teste = await db.testeRestauracao.create({
+      data: {
+        serventiaId,
+        dataTeste: parsed.data.dataTeste,
+        sistemasRestaurados: parsed.data.sistemasRestaurados,
+        rtoDefinido: parsed.data.rtoDefinido,
+        rtoAferido: parsed.data.rtoAferido,
+        rpoDefinido: parsed.data.rpoDefinido,
+        rpoAferido: parsed.data.rpoAferido,
+        conformidade,
+        participantes: parsed.data.participantes,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        arquiteturaBackup: parsed.data.arquiteturaBackup as any,
+      },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'TESTE_RESTAURACAO_CRIADO',
-    entidade: 'TesteRestauracao',
-    entidadeId: teste.id,
-    valorNovo: { dataTeste: teste.dataTeste, conformidade: teste.conformidade },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'TESTE_RESTAURACAO_CRIADO',
+      entidade: 'TesteRestauracao',
+      entidadeId: teste.id,
+      valorNovo: { dataTeste: teste.dataTeste, conformidade: teste.conformidade },
+    })
+
+    return teste
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/testes-restauracao')
-  return { success: true, id: teste.id }
+  return { success: true, id: result.value.id }
 }
 
 /** Anexo V, item 8 — registro das providências deliberadas para o plano corretivo */
@@ -109,26 +116,30 @@ export async function atualizarMedidasCorretivas(
 ) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  const membro = await garantirPodeEditar(session.user.id, serventiaId)
+  const membro = await garantirPodeEditar(userId, serventiaId)
   if (!membro) return { error: 'Sem permissão para editar testes de restauração' }
 
   const teste = await db.testeRestauracao.findFirst({ where: { id: testeId, serventiaId } })
   if (!teste) return { error: 'Teste de restauração não encontrado' }
 
-  await db.testeRestauracao.update({
-    where: { id: testeId },
-    data: { medidasCorretivas },
-  })
+  const result = await runLogged('atualizarMedidasCorretivas', { userId, serventiaId, testeId }, async () => {
+    await db.testeRestauracao.update({
+      where: { id: testeId },
+      data: { medidasCorretivas },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'TESTE_RESTAURACAO_CRIADO', // reutiliza ação do módulo; valorNovo distingue a operação
-    entidade: 'TesteRestauracao',
-    entidadeId: testeId,
-    valorNovo: { operacao: 'MEDIDAS_CORRETIVAS_ATUALIZADAS', medidasCorretivas },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'TESTE_RESTAURACAO_CRIADO', // reutiliza ação do módulo; valorNovo distingue a operação
+      entidade: 'TesteRestauracao',
+      entidadeId: testeId,
+      valorNovo: { operacao: 'MEDIDAS_CORRETIVAS_ATUALIZADAS', medidasCorretivas },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/testes-restauracao')
   return { success: true }

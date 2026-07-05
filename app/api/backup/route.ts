@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { createBackup, listBackups } from '@/lib/backup'
 import { getValidatedMembro } from '@/lib/serventia-context'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -72,7 +73,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, manifest }, { status: 201 })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro ao criar backup'
-    console.error('[Backup] Erro:', msg)
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'criar_backup' })
+    log.error({ err: e }, 'Falha ao criar backup')
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

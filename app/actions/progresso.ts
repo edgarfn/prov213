@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { podeDeclaraEtapa } from '@/lib/business-rules'
+import { runLogged } from '@/lib/logger'
 
 const progressoSchema = z.object({
   status: z.enum(['NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'NAO_APLICAVEL'] as const),
@@ -23,9 +24,10 @@ export async function atualizarProgresso(
 ) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
   const membro = await db.membroServentia.findUnique({
-    where: { userId_serventiaId: { userId: session.user.id, serventiaId } },
+    where: { userId_serventiaId: { userId, serventiaId } },
   })
   if (!membro || membro.papel === 'AUDITOR_LEITURA') {
     return { error: 'Sem permissão para editar' }
@@ -39,31 +41,34 @@ export async function atualizarProgresso(
     where: { serventiaId_requisitoId: { serventiaId, requisitoId } },
   })
 
-  const progresso = await db.progressoRequisito.upsert({
-    where: { serventiaId_requisitoId: { serventiaId, requisitoId } },
-    update: {
-      ...parsed.data,
-      responsavelId: session.user.id,
-      dataConclusao: parsed.data.status === 'CONCLUIDO' ? new Date() : null,
-    },
-    create: {
-      serventiaId,
-      requisitoId,
-      ...parsed.data,
-      responsavelId: session.user.id,
-      dataConclusao: parsed.data.status === 'CONCLUIDO' ? new Date() : null,
-    },
-  })
+  const result = await runLogged('atualizarProgresso', { userId, serventiaId, requisitoId }, async () => {
+    const progresso = await db.progressoRequisito.upsert({
+      where: { serventiaId_requisitoId: { serventiaId, requisitoId } },
+      update: {
+        ...parsed.data,
+        responsavelId: userId,
+        dataConclusao: parsed.data.status === 'CONCLUIDO' ? new Date() : null,
+      },
+      create: {
+        serventiaId,
+        requisitoId,
+        ...parsed.data,
+        responsavelId: userId,
+        dataConclusao: parsed.data.status === 'CONCLUIDO' ? new Date() : null,
+      },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'PROGRESSO_ATUALIZADO',
-    entidade: 'ProgressoRequisito',
-    entidadeId: progresso.id,
-    valorAnterior: anterior ? { status: anterior.status } : null,
-    valorNovo: { status: parsed.data.status, requisitoId },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'PROGRESSO_ATUALIZADO',
+      entidade: 'ProgressoRequisito',
+      entidadeId: progresso.id,
+      valorAnterior: anterior ? { status: anterior.status } : null,
+      valorNovo: { status: parsed.data.status, requisitoId },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/checklists')
   return { success: true }
@@ -72,9 +77,10 @@ export async function atualizarProgresso(
 export async function declaraConclusaoEtapa(serventiaId: string, etapaId: string) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
   const membro = await db.membroServentia.findUnique({
-    where: { userId_serventiaId: { userId: session.user.id, serventiaId } },
+    where: { userId_serventiaId: { userId, serventiaId } },
   })
   if (!membro || membro.papel !== 'TITULAR') {
     return { error: 'Apenas o Titular pode declarar conclusão de etapa' }
@@ -122,26 +128,29 @@ export async function declaraConclusaoEtapa(serventiaId: string, etapaId: string
     }
   }
 
-  const user = await db.user.findUnique({ where: { id: session.user.id } })
+  const user = await db.user.findUnique({ where: { id: userId } })
 
-  await db.declaracao.upsert({
-    where: { serventiaId_etapaId: { serventiaId, etapaId } },
-    update: { dataDeclaracao: new Date(), declarante: user?.name ?? session.user.email ?? '' },
-    create: {
+  const result = await runLogged('declaraConclusaoEtapa', { userId, serventiaId, etapaId }, async () => {
+    await db.declaracao.upsert({
+      where: { serventiaId_etapaId: { serventiaId, etapaId } },
+      update: { dataDeclaracao: new Date(), declarante: user?.name ?? session.user.email ?? '' },
+      create: {
+        serventiaId,
+        etapaId,
+        declarante: user?.name ?? session.user.email ?? '',
+      },
+    })
+
+    await logAudit({
       serventiaId,
-      etapaId,
-      declarante: user?.name ?? session.user.email ?? '',
-    },
+      userId,
+      acao: 'ETAPA_DECLARADA',
+      entidade: 'Etapa',
+      entidadeId: etapaId,
+      valorNovo: { etapaNumero: etapa.numero, etapaTitulo: etapa.titulo },
+    })
   })
-
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'ETAPA_DECLARADA',
-    entidade: 'Etapa',
-    entidadeId: etapaId,
-    valorNovo: { etapaNumero: etapa.numero, etapaTitulo: etapa.titulo },
-  })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/checklists')
   return { success: true }

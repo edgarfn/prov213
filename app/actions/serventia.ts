@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
+import { runLogged } from '@/lib/logger'
 import type { ClasseServentia } from '@/types/prisma'
 
 const serventiaSchema = z.object({
@@ -28,6 +29,7 @@ const serventiaSchema = z.object({
 export async function criarServentia(formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
   const raw = Object.fromEntries(formData.entries())
   const parsed = serventiaSchema.safeParse(raw)
@@ -35,54 +37,60 @@ export async function criarServentia(formData: FormData) {
     return { error: 'Dados inválidos.', issues: parsed.error.issues }
   }
 
-  const serventia = await db.serventia.create({
-    data: { ...parsed.data, onboardingConcluido: true },
-  })
-
-  await db.membroServentia.create({
-    data: {
-      userId: session.user.id,
-      serventiaId: serventia.id,
-      papel: 'TITULAR',
-    },
-  })
-
-  const requisitos = await db.requisito.findMany({
-    where: {
-      classesAplicaveis: { has: parsed.data.classe as ClasseServentia },
-    },
-  })
-
-  if (requisitos.length > 0) {
-    await db.progressoRequisito.createMany({
-      data: requisitos.map((r) => ({
-        serventiaId: serventia.id,
-        requisitoId: r.id,
-        status: 'NAO_INICIADO' as const,
-      })),
-      skipDuplicates: true,
+  const result = await runLogged('criarServentia', { userId }, async () => {
+    const serventia = await db.serventia.create({
+      data: { ...parsed.data, onboardingConcluido: true },
     })
-  }
 
-  await logAudit({
-    serventiaId: serventia.id,
-    userId: session.user.id,
-    acao: 'SERVENTIA_CRIADA',
-    entidade: 'Serventia',
-    entidadeId: serventia.id,
-    valorNovo: { nome: serventia.nome, classe: serventia.classe },
+    await db.membroServentia.create({
+      data: {
+        userId,
+        serventiaId: serventia.id,
+        papel: 'TITULAR',
+      },
+    })
+
+    const requisitos = await db.requisito.findMany({
+      where: {
+        classesAplicaveis: { has: parsed.data.classe as ClasseServentia },
+      },
+    })
+
+    if (requisitos.length > 0) {
+      await db.progressoRequisito.createMany({
+        data: requisitos.map((r) => ({
+          serventiaId: serventia.id,
+          requisitoId: r.id,
+          status: 'NAO_INICIADO' as const,
+        })),
+        skipDuplicates: true,
+      })
+    }
+
+    await logAudit({
+      serventiaId: serventia.id,
+      userId,
+      acao: 'SERVENTIA_CRIADA',
+      entidade: 'Serventia',
+      entidadeId: serventia.id,
+      valorNovo: { nome: serventia.nome, classe: serventia.classe },
+    })
+
+    return serventia
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/dashboard')
-  return { success: true, serventiaId: serventia.id }
+  return { success: true, serventiaId: result.value.id }
 }
 
 export async function atualizarServentia(serventiaId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
   const membro = await db.membroServentia.findUnique({
-    where: { userId_serventiaId: { userId: session.user.id, serventiaId } },
+    where: { userId_serventiaId: { userId, serventiaId } },
   })
   if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
     return { error: 'Sem permissão' }
@@ -92,19 +100,22 @@ export async function atualizarServentia(serventiaId: string, formData: FormData
   const parsed = serventiaSchema.partial().safeParse(raw)
   if (!parsed.success) return { error: 'Dados inválidos' }
 
-  const serventia = await db.serventia.update({
-    where: { id: serventiaId },
-    data: { ...parsed.data, onboardingConcluido: true },
-  })
+  const result = await runLogged('atualizarServentia', { userId, serventiaId }, async () => {
+    const serventia = await db.serventia.update({
+      where: { id: serventiaId },
+      data: { ...parsed.data, onboardingConcluido: true },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: 'SERVENTIA_ATUALIZADA',
-    entidade: 'Serventia',
-    entidadeId: serventia.id,
-    valorNovo: parsed.data,
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: 'SERVENTIA_ATUALIZADA',
+      entidade: 'Serventia',
+      entidadeId: serventia.id,
+      valorNovo: parsed.data,
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/dashboard')
   revalidatePath('/selecionar-serventia')
@@ -125,27 +136,31 @@ export async function atualizarServentia(serventiaId: string, formData: FormData
 export async function alternarAtivaServentia(serventiaId: string, ativa: boolean) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
   const membro = await db.membroServentia.findUnique({
-    where: { userId_serventiaId: { userId: session.user.id, serventiaId } },
+    where: { userId_serventiaId: { userId, serventiaId } },
   })
   if (!membro || membro.papel !== 'TITULAR') {
     return { error: 'Apenas o Titular pode ativar ou inativar a serventia' }
   }
 
-  const serventia = await db.serventia.update({
-    where: { id: serventiaId },
-    data: { ativa },
-  })
+  const result = await runLogged('alternarAtivaServentia', { userId, serventiaId }, async () => {
+    const serventia = await db.serventia.update({
+      where: { id: serventiaId },
+      data: { ativa },
+    })
 
-  await logAudit({
-    serventiaId,
-    userId: session.user.id,
-    acao: ativa ? 'SERVENTIA_ATIVADA' : 'SERVENTIA_INATIVADA',
-    entidade: 'Serventia',
-    entidadeId: serventia.id,
-    valorNovo: { ativa },
+    await logAudit({
+      serventiaId,
+      userId,
+      acao: ativa ? 'SERVENTIA_ATIVADA' : 'SERVENTIA_INATIVADA',
+      entidade: 'Serventia',
+      entidadeId: serventia.id,
+      valorNovo: { ativa },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/selecionar-serventia')
   revalidatePath('/dashboard')
@@ -155,11 +170,15 @@ export async function alternarAtivaServentia(serventiaId: string, ativa: boolean
 export async function concluirOnboarding(serventiaId: string) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
+  const userId = session.user.id
 
-  await db.serventia.update({
-    where: { id: serventiaId },
-    data: { onboardingConcluido: true },
+  const result = await runLogged('concluirOnboarding', { userId, serventiaId }, async () => {
+    await db.serventia.update({
+      where: { id: serventiaId },
+      data: { onboardingConcluido: true },
+    })
   })
+  if (!result.ok) return { error: result.error }
 
   revalidatePath('/dashboard')
   return { success: true }
