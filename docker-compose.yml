@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prov213-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:?defina POSTGRES_USER no .env}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}"
+      POSTGRES_DB: "${POSTGRES_DB:-prov213}"
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?defina POSTGRES_USER no .env}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prov213-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prov213-app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${POSTGRES_USER:?defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@prov213-db:5432/${POSTGRES_DB:-prov213}"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:?defina NEXTAUTH_URL no .env}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?gere um valor novo com openssl rand -base64 32 e defina NEXTAUTH_SECRET no .env}"
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "${NEXT_PUBLIC_TURNSTILE_SITE_KEY:?defina NEXT_PUBLIC_TURNSTILE_SITE_KEY no .env}"
+      TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:?defina TURNSTILE_SECRET_KEY no .env}"
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - prov213-net
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  prov213-net:
+    driver: bridge

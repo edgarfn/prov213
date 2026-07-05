@@ -1,0 +1,431 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ClasseServentia {
+  CLASSE_1
+  CLASSE_2
+  CLASSE_3
+}
+
+enum SubclasseServentia {
+  A
+  B
+  C
+  D
+  E
+  F
+  G
+  H
+  I
+  J
+}
+
+enum TipoSolucao {
+  PROPRIA
+  CONTRATADA
+  COMPARTILHADA
+  COLETIVA
+}
+
+enum TipoInfra {
+  LOCAL
+  NUVEM
+  HIBRIDA
+}
+
+enum RolePapel {
+  TITULAR
+  RESPONSAVEL_TECNICO
+  DPO
+  COLABORADOR
+  AUDITOR_LEITURA
+  GESTOR_REGIONAL // Pode gerenciar N serventias (multi-tenant)
+}
+
+enum StatusRequisito {
+  NAO_INICIADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  NAO_APLICAVEL
+}
+
+enum TipoEvidencia {
+  DOCUMENTO
+  CONTRATO
+  PRINT
+  LOG
+  RELATORIO
+  ATA
+}
+
+enum GravidadeIncidente {
+  BAIXO
+  MEDIO
+  ALTO
+  CRITICO
+}
+
+enum StatusIncidente {
+  ABERTO
+  EM_TRATAMENTO
+  ENCERRADO
+}
+
+enum ConformidadeTeste {
+  INTEGRAL
+  PARCIAL
+  NAO_CONFORME
+}
+
+enum StatusProrrogacao {
+  SOLICITADA
+  DEFERIDA
+  INDEFERIDA
+}
+
+/// Art. 21, §1º (Classe 1, análise simplificada) x §2º (Classes 2 e 3,
+/// requerimento formal com elementos probatórios)
+enum FluxoProrrogacao {
+  SIMPLIFICADO
+  FORMAL
+}
+
+// ─── NextAuth ─────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Usuários ─────────────────────────────────────────────────────────────────
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  emailVerified      DateTime?
+  name               String?
+  passwordHash       String?
+  image              String?
+  mfaEnabled         Boolean   @default(false)
+  mfaSecret          String?
+  mfaVerified        Boolean   @default(false)
+  mustChangePassword Boolean   @default(false)
+  isAdmin            Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  membros        MembroServentia[]
+  progressos     ProgressoRequisito[]
+  auditLogs      AuditLog[]
+  passwordResets PasswordResetToken[]
+}
+
+// ─── Reset de senha ───────────────────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Serventias ───────────────────────────────────────────────────────────────
+
+model Serventia {
+  id                       String              @id @default(cuid())
+  nome                     String
+  cns                      String              @unique
+  cnpj                     String?
+  municipio                String
+  uf                       String
+  classe                   ClasseServentia
+  subclasse                SubclasseServentia?
+  arrecadacaoSemestral     Float?
+  tipoSolucao              TipoSolucao
+  infra                    TipoInfra
+  dataVigenciaNorma        DateTime
+  responsavelTecnico       String?
+  controladorDados         String?
+  dpo                      String?
+  /// @deprecated Substituído pela tabela `Prorrogacao` (histórico completo,
+  /// teto de 90 dias validado e fluxo simplificado/formal por classe).
+  /// Mantidos por 1 ciclo de release para compatibilidade; não usar em código novo.
+  prorrogacaoAtiva         Boolean             @default(false)
+  prorrogacaoJustificativa String?
+  prorrogacaoNovaData      DateTime?
+  onboardingConcluido      Boolean             @default(false)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  membros           MembroServentia[]
+  progressos        ProgressoRequisito[]
+  incidentes        Incidente[]
+  vulnerabilidades  Vulnerabilidade[]
+  testesRestauracao TesteRestauracao[]
+  declaracoes       Declaracao[]
+  auditLogs         AuditLog[]
+  prorrogacoes      Prorrogacao[]
+}
+
+model MembroServentia {
+  id          String    @id @default(cuid())
+  userId      String
+  serventiaId String
+  papel       RolePapel @default(COLABORADOR)
+  ativo       Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  serventia   Serventia @relation(fields: [serventiaId], references: [id])
+
+  @@unique([userId, serventiaId])
+}
+
+// ─── Catálogo (seed) ──────────────────────────────────────────────────────────
+
+model Etapa {
+  id                 String @id @default(cuid())
+  numero             Int    @unique
+  titulo             String
+  escopo             String @db.Text
+  condicoesObjetivas String @db.Text
+
+  requisitos  Requisito[]
+  declaracoes Declaracao[]
+}
+
+model Requisito {
+  id                  String               @id @default(cuid())
+  etapaId             String
+  codigo              String               @unique
+  titulo              String
+  descricaoNorma      String               @db.Text
+  explicacaoLeigo     String               @db.Text
+  articuloReferencia  String
+  classesAplicaveis   ClasseServentia[]
+  parametrosPorClasse Json?
+  evidenciasExigidas  String[]
+  obrigatorio         Boolean              @default(true)
+  metaExcelencia      Boolean              @default(false)
+  etapa               Etapa                @relation(fields: [etapaId], references: [id])
+  progressos          ProgressoRequisito[]
+}
+
+// ─── Progresso por Serventia ──────────────────────────────────────────────────
+
+model ProgressoRequisito {
+  id                       String          @id @default(cuid())
+  serventiaId              String
+  requisitoId              String
+  status                   StatusRequisito @default(NAO_INICIADO)
+  responsavelId            String?
+  dataConclusao            DateTime?
+  observacoes              String?         @db.Text
+  solucaoAdotada           String?         @db.Text
+  /// Demonstração de equivalência funcional (Anexo IV, item VII, "c") — usada
+  /// no Relatório Simplificado da Classe 1; opcional para as demais classes.
+  demonstracaoEquivalencia String?         @db.Text
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  serventia                Serventia       @relation(fields: [serventiaId], references: [id])
+  requisito                Requisito       @relation(fields: [requisitoId], references: [id])
+  responsavel              User?           @relation(fields: [responsavelId], references: [id])
+  evidencias               Evidencia[]
+
+  @@unique([serventiaId, requisitoId])
+}
+
+// ─── Evidências ───────────────────────────────────────────────────────────────
+
+/// Vinculada a exatamente uma origem: um ProgressoRequisito (dossiê do
+/// checklist) ou um TesteRestauracao (Anexo V) — nunca ambos, nunca nenhum
+/// (reforçado por CHECK constraint no banco; ver migration correspondente).
+model Evidencia {
+  id                   String              @id @default(cuid())
+  progressoRequisitoId String?
+  testeRestauracaoId   String?
+  nomeArquivo          String
+  storagePath          String
+  hashSha256           String
+  tamanhoBytes         Int
+  tipo                 TipoEvidencia       @default(DOCUMENTO)
+  uploadedBy           String
+  uploadedAt           DateTime            @default(now())
+  deletedAt            DateTime?
+  progressoRequisito   ProgressoRequisito? @relation(fields: [progressoRequisitoId], references: [id])
+  testeRestauracao     TesteRestauracao?   @relation(fields: [testeRestauracaoId], references: [id])
+
+  @@index([testeRestauracaoId])
+}
+
+// ─── Incidentes ───────────────────────────────────────────────────────────────
+
+model Incidente {
+  id                     String             @id @default(cuid())
+  serventiaId            String
+  titulo                 String
+  descricao              String             @db.Text
+  dataOcorrencia         DateTime
+  dataCiencia            DateTime
+  gravidade              GravidadeIncidente
+  status                 StatusIncidente    @default(ABERTO)
+  comunicadoCorregedoria Boolean            @default(false)
+  dataComunicacao        DateTime?
+  comunicadoAnpd         Boolean            @default(false)
+  causaRaiz              String?            @db.Text
+  medidasCorretivas      String?            @db.Text
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  serventia              Serventia          @relation(fields: [serventiaId], references: [id])
+}
+
+// ─── Vulnerabilidades ─────────────────────────────────────────────────────────
+
+model Vulnerabilidade {
+  id                 String    @id @default(cuid())
+  serventiaId        String
+  descricao          String    @db.Text
+  dataIdentificacao  DateTime
+  classificacaoRisco String
+  exploracaoAtiva    Boolean   @default(false)
+  prazoLimite        DateTime
+  dataEncerramento   DateTime?
+  providencias       String?   @db.Text
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  serventia          Serventia @relation(fields: [serventiaId], references: [id])
+}
+
+// ─── Testes de Restauração ────────────────────────────────────────────────────
+
+model TesteRestauracao {
+  id                  String            @id @default(cuid())
+  serventiaId         String
+  dataTeste           DateTime
+  sistemasRestaurados String[]
+  rtoAferido          Float
+  rtoDefinido         Float
+  rpoAferido          Float
+  rpoDefinido         Float
+  conformidade        ConformidadeTeste
+  participantes       Json?
+  arquiteturaBackup   Json?
+  /// Anexo V, item 8 — providências deliberadas quando a conformidade não é integral
+  medidasCorretivas   String?           @db.Text
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  serventia           Serventia         @relation(fields: [serventiaId], references: [id])
+  evidencias          Evidencia[]
+}
+
+// ─── Declarações ──────────────────────────────────────────────────────────────
+
+model Declaracao {
+  id                String    @id @default(cuid())
+  serventiaId       String
+  etapaId           String
+  dataDeclaracao    DateTime  @default(now())
+  declarante        String
+  arquivoDeclaracao String?
+  serventia         Serventia @relation(fields: [serventiaId], references: [id])
+  etapa             Etapa     @relation(fields: [etapaId], references: [id])
+
+  @@unique([serventiaId, etapaId])
+}
+
+// ─── Prorrogação de prazo (Art. 21) ───────────────────────────────────────────
+
+/// Histórico de pedidos de prorrogação do prazo do Art. 20 (Etapas 1 e 2),
+/// de até 90 dias, uma única vez. Substitui os campos soltos
+/// `Serventia.prorrogacaoAtiva/prorrogacaoJustificativa/prorrogacaoNovaData`.
+model Prorrogacao {
+  id                   String            @id @default(cuid())
+  serventiaId          String
+  /// Único valor usado hoje: 'ETAPAS_1_2' (Art. 21 só prorroga o prazo do Art. 20)
+  tipoPrazo            String
+  dataOriginal         DateTime
+  dataSolicitada       DateTime
+  fluxo                FluxoProrrogacao
+  justificativa        String            @db.Text
+  /// Obrigatório quando `fluxo = FORMAL` (Classes 2 e 3, Art. 21, §2º)
+  elementosProbatorios String?           @db.Text
+  status               StatusProrrogacao @default(SOLICITADA)
+  solicitadoPor        String
+  dataSolicitacao      DateTime          @default(now())
+  decididoPor          String?
+  dataDecisao          DateTime?
+  observacoesDecisao   String?           @db.Text
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  serventia            Serventia         @relation(fields: [serventiaId], references: [id])
+
+  @@index([serventiaId, status])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id              String     @id @default(cuid())
+  serventiaId     String?
+  userId          String?
+  // Desnormalizado para resiliência: mantém identidade mesmo se o usuário for excluído
+  userEmail       String?
+  userName        String?
+  acao            String // ex: LOGIN_SUCESSO, UPLOAD, DECLARAR_CONCLUSAO
+  entidade        String // ex: User, Evidencia, Etapa
+  entidadeId      String?
+  valorAnterior   Json? // dados ANTES da operação (dados sensíveis mascarados)
+  valorNovo       Json? // dados APÓS a operação (dados sensíveis mascarados)
+  timestamp       DateTime   @default(now())
+  ipAddress       String?
+  userAgent       String?
+  // Hash SHA-256 formando cadeia de integridade (tamper-evident log chain)
+  hashIntegridade String?
+  serventia       Serventia? @relation(fields: [serventiaId], references: [id])
+  user            User?      @relation(fields: [userId], references: [id])
+
+  @@index([serventiaId, timestamp])
+  @@index([userId])
+  @@index([acao])
+}

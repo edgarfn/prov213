@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RolePapel" ADD VALUE 'GESTOR_REGIONAL';
