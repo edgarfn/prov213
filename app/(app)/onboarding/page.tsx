@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { criarServentia } from '@/app/actions/serventia'
 import { calcularClassePorArrecadacao, calcularSubclasse } from '@/lib/business-rules'
 import { ESTADOS, CLASSE_LABEL, TIPO_SOLUCAO_LABEL, INFRA_LABEL } from '@/lib/serventia-labels'
-import { ChevronRight, ChevronLeft, Info, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ChevronRight, ChevronLeft, Info, Loader2, Building2, Check } from 'lucide-react'
 
 const STEPS = [
   { id: 1, title: 'Identificação', desc: 'Dados básicos da serventia' },
@@ -105,32 +106,52 @@ export default function OnboardingPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Configurar Serventia</h1>
-        <p className="text-muted-foreground mt-1">
-          Configure os dados do cartório para personalizar seu plano de conformidade.
-        </p>
+      <div className="mb-8 flex items-start gap-4">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-50 ring-1 ring-blue-100">
+          <Building2 className="h-5 w-5 text-blue-600" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Configurar serventia</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Configure os dados do cartório para personalizar seu plano de conformidade.
+          </p>
+        </div>
       </div>
 
       {/* Indicador de etapas */}
-      <div className="flex items-center gap-2 mb-8">
+      <div className="mb-8 flex items-center">
         {STEPS.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-2">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-                step === s.id
-                  ? 'bg-blue-600 text-white'
-                  : step > s.id
-                  ? 'bg-green-500 text-white'
-                  : 'bg-slate-200 text-slate-600'
-              }`}
-            >
-              {step > s.id ? '✓' : s.id}
+          <div key={s.id} className={cn('flex items-center', i < STEPS.length - 1 && 'flex-1')}>
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                className={cn(
+                  'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors',
+                  step === s.id
+                    ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                    : step > s.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-400',
+                )}
+              >
+                {step > s.id ? <Check className="h-4 w-4" /> : s.id}
+              </div>
+              <span
+                className={cn(
+                  'hidden text-xs sm:block',
+                  step === s.id ? 'font-medium text-blue-700' : 'text-muted-foreground',
+                )}
+              >
+                {s.title}
+              </span>
             </div>
-            <span className={`hidden sm:inline text-sm ${step === s.id ? 'font-medium' : 'text-muted-foreground'}`}>
-              {s.title}
-            </span>
-            {i < STEPS.length - 1 && <ChevronRight className="h-4 w-4 text-slate-300" />}
+            {i < STEPS.length - 1 && (
+              <div
+                className={cn(
+                  'mx-2 h-0.5 flex-1 rounded-full transition-colors',
+                  step > s.id ? 'bg-blue-600' : 'bg-slate-200',
+                )}
+              />
+            )}
           </div>
         ))}
       </div>

@@ -3,14 +3,27 @@ import { randomBytes } from 'crypto'
 import { addHours } from 'date-fns'
 import { db } from '@/lib/db'
 import { sendPasswordResetEmail } from '@/lib/email'
+import { verifyTurnstileToken } from '@/lib/turnstile'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-  const { email } = (await req.json()) as { email?: string }
+  const { email, turnstileToken } = (await req.json()) as { email?: string; turnstileToken?: string }
 
   if (!email || typeof email !== 'string') {
     return NextResponse.json({ error: 'E-mail obrigatório' }, { status: 400 })
+  }
+
+  if (!turnstileToken || typeof turnstileToken !== 'string') {
+    return NextResponse.json({ error: 'Complete a verificação de segurança antes de continuar.' }, { status: 400 })
+  }
+
+  const ip = req.headers.get('CF-Connecting-IP') ??
+             req.headers.get('X-Forwarded-For')?.split(',')[0].trim() ??
+             undefined
+  const turnstileOk = await verifyTurnstileToken(turnstileToken, ip)
+  if (!turnstileOk) {
+    return NextResponse.json({ error: 'Verificação de segurança falhou. Tente novamente.' }, { status: 400 })
   }
 
   const user = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } })

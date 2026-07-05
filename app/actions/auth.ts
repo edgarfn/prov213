@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth'
 import { headers } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { Prisma } from '@/app/generated/prisma/client'
 import { verifyTurnstileToken } from '@/lib/turnstile'
 
 const registerSchema = z.object({
@@ -14,6 +15,13 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 })
+
+// Erros "esperados" da transação de auto-cadastro — usados só para abortar o
+// $transaction com uma mensagem específica, nunca vazam além de registerUser.
+class CadastroIndisponivelError extends Error {}
+class EmailJaCadastradoError extends Error {}
+
+const REGISTRO_MAX_TENTATIVAS = 3
 
 export async function registerUser(formData: FormData) {
   const turnstileToken = formData.get('turnstileToken')
@@ -43,34 +51,56 @@ export async function registerUser(formData: FormData) {
 
   const { name, email, password } = parsed.data
 
-  try {
-    // Autocadastro só é permitido no primeiro acesso: o primeiro usuário
-    // criado vira super-admin e, a partir daí, a rota fica bloqueada.
-    const userCount = await db.user.count()
-    if (userCount > 0) {
-      return { error: 'Cadastro indisponível. Peça a um administrador que crie sua conta.' }
-    }
+  // Autocadastro só é permitido no primeiro acesso: o primeiro usuário criado
+  // vira super-admin e, a partir daí, a rota fica bloqueada. A checagem
+  // "contar e depois criar" roda dentro de uma transação Serializable para
+  // fechar a corrida entre duas requisições simultâneas: sob essa isolação,
+  // se ambas leem o banco vazio ao mesmo tempo, o Postgres detecta o
+  // conflito de escrita e aborta uma delas (erro P2034) em vez de deixar
+  // as duas criarem um "primeiro admin" cada uma. Repetimos algumas vezes
+  // porque abortar-e-repetir é o comportamento esperado do Serializable,
+  // não uma falha real.
+  for (let tentativa = 1; tentativa <= REGISTRO_MAX_TENTATIVAS; tentativa++) {
+    try {
+      await db.$transaction(async (tx) => {
+        const userCount = await tx.user.count()
+        if (userCount > 0) throw new CadastroIndisponivelError()
 
-    const existing = await db.user.findUnique({ where: { email } })
-    if (existing) {
-      return { error: 'E-mail já cadastrado.' }
-    }
+        const existing = await tx.user.findUnique({ where: { email } })
+        if (existing) throw new EmailJaCadastradoError()
 
-    const passwordHash = await bcrypt.hash(password, 12)
-    await db.user.create({ data: { name, email, passwordHash, isAdmin: true } })
+        const passwordHash = await bcrypt.hash(password, 12)
+        await tx.user.create({ data: { name, email, passwordHash, isAdmin: true } })
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 
-    return { success: true }
-  } catch (e: unknown) {
-    const err = e instanceof Error ? e : new Error(String(e))
-    // Log no servidor para diagnóstico — não expõe detalhes ao cliente
-    console.error('[registerUser] Erro:', err.message)
-    return {
-      error:
-        process.env.NODE_ENV === 'development'
-          ? `Erro (dev): ${err.message}`
-          : 'Erro ao criar conta. Tente novamente.',
+      return { success: true }
+    } catch (e: unknown) {
+      if (e instanceof CadastroIndisponivelError) {
+        return { error: 'Cadastro indisponível. Peça a um administrador que crie sua conta.' }
+      }
+      if (e instanceof EmailJaCadastradoError) {
+        return { error: 'E-mail já cadastrado.' }
+      }
+
+      const isSerializationConflict =
+        e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2034'
+      if (isSerializationConflict && tentativa < REGISTRO_MAX_TENTATIVAS) {
+        continue
+      }
+
+      const err = e instanceof Error ? e : new Error(String(e))
+      // Log no servidor para diagnóstico — não expõe detalhes ao cliente
+      console.error('[registerUser] Erro:', err.message)
+      return {
+        error:
+          process.env.NODE_ENV === 'development'
+            ? `Erro (dev): ${err.message}`
+            : 'Erro ao criar conta. Tente novamente.',
+      }
     }
   }
+
+  return { error: 'Erro ao criar conta. Tente novamente.' }
 }
 
 export async function setupMFA() {

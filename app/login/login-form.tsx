@@ -8,16 +8,9 @@ import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ShieldCheck, Loader2, ShieldAlert } from 'lucide-react'
+import { AuthShell, AuthHeader } from '@/components/auth-shell'
+import { ShieldCheck, Loader2, ShieldAlert, KeyRound } from 'lucide-react'
 
 type LoginStep = 'credentials' | 'mfa'
 
@@ -131,185 +124,179 @@ function LoginContent({ allowRegistration }: { allowRegistration: boolean }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-            <ShieldCheck className="h-6 w-6 text-blue-600" />
+    <AuthShell>
+      {step === 'credentials' ? (
+        <AuthHeader
+          icon={ShieldCheck}
+          title="Entrar"
+          description="Acesse sua conta para continuar o acompanhamento de conformidade."
+        />
+      ) : (
+        <AuthHeader
+          icon={KeyRound}
+          title="Verificação em duas etapas"
+          description="Abra o Google Authenticator ou Authy e insira o código de 6 dígitos."
+        />
+      )}
+
+      {allowRegistration && step === 'credentials' && (
+        <Alert className="mb-4 border-blue-100 bg-blue-50 text-blue-800">
+          <ShieldCheck className="h-4 w-4" />
+          <AlertDescription>
+            Primeiro acesso ao sistema: crie a conta de administrador para começar.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {step === 'credentials' ? (
+        <form onSubmit={handleCredentials} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">E-mail</Label>
+            <Input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              autoFocus
+              value={credentials.email}
+              onChange={(e) =>
+                setCredentials((p) => ({ ...p, email: e.target.value }))
+              }
+            />
           </div>
-          <CardTitle className="text-2xl">Prov213</CardTitle>
-          <CardDescription>
-            Copiloto de Conformidade — Provimento CNJ nº 213/2026
-          </CardDescription>
-        </CardHeader>
 
-        <CardContent>
-          {allowRegistration && (
-            <Alert className="mb-4 border-blue-100 bg-blue-50 text-blue-800">
-              <ShieldCheck className="h-4 w-4" />
-              <AlertDescription>
-                Primeiro acesso ao sistema: crie a conta de administrador para começar.
-              </AlertDescription>
-            </Alert>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="password">Senha</Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={credentials.password}
+              onChange={(e) =>
+                setCredentials((p) => ({ ...p, password: e.target.value }))
+              }
+            />
+          </div>
 
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <ShieldAlert className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {step === 'credentials' ? (
-            <form onSubmit={handleCredentials} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  autoFocus
-                  value={credentials.email}
-                  onChange={(e) =>
-                    setCredentials((p) => ({ ...p, email: e.target.value }))
-                  }
+          {/* Cloudflare Turnstile — Privacy by Design
+              - Não usa cookies de rastreamento
+              - Token efêmero verificado server-side uma única vez
+              - 'always' exibe o widget explicitamente para feedback visual claro
+          */}
+          <div className="flex flex-col items-center gap-1">
+            {siteKey ? (
+              <div className="w-full flex justify-center">
+                <Turnstile
+                  ref={turnstileRef}
+                  siteKey={siteKey}
+                  onSuccess={handleTurnstileSuccess}
+                  onError={handleTurnstileError}
+                  onExpire={resetTurnstile}
+                  options={{
+                    theme: 'light',
+                    language: 'pt-BR',
+                    appearance: 'always',
+                  }}
                 />
               </div>
+            ) : (
+              <p className="text-xs text-amber-600 text-center">
+                Configure <code>NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> para ativar a verificação de segurança
+              </p>
+            )}
+            {turnstileError && (
+              <p className="text-xs text-red-600">
+                Falha na verificação. Recarregue a página.
+              </p>
+            )}
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={credentials.password}
-                  onChange={(e) =>
-                    setCredentials((p) => ({ ...p, password: e.target.value }))
-                  }
-                />
-              </div>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loading || (!!siteKey && !turnstileToken)}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Entrar
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={handleMFA} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="mfa">Código de 6 dígitos</Label>
+            <Input
+              id="mfa"
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              pattern="\d{6}"
+              required
+              autoFocus
+              placeholder="000000"
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+              className="text-center text-2xl tracking-widest"
+            />
+          </div>
 
-              {/* Cloudflare Turnstile — Privacy by Design
-                  - Não usa cookies de rastreamento
-                  - Token efêmero verificado server-side uma única vez
-                  - 'always' exibe o widget explicitamente para feedback visual claro
-              */}
-              <div className="flex flex-col items-center gap-1">
-                {siteKey ? (
-                  <div className="w-full flex justify-center">
-                    <Turnstile
-                      ref={turnstileRef}
-                      siteKey={siteKey}
-                      onSuccess={handleTurnstileSuccess}
-                      onError={handleTurnstileError}
-                      onExpire={resetTurnstile}
-                      options={{
-                        theme: 'light',
-                        language: 'pt-BR',
-                        appearance: 'always',
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs text-amber-600 text-center">
-                    Configure <code>NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> para ativar a verificação de segurança
-                  </p>
-                )}
-                {turnstileError && (
-                  <p className="text-xs text-red-600">
-                    Falha na verificação. Recarregue a página.
-                  </p>
-                )}
-              </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Verificar
+          </Button>
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={loading || (!!siteKey && !turnstileToken)}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Entrar
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleMFA} className="space-y-4">
-              <div className="rounded-lg bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
-                <strong>Verificação em duas etapas</strong>
-                <br />
-                Abra o Google Authenticator ou Authy e insira o código de 6 dígitos.
-              </div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              setStep('credentials')
+              setError(null)
+              setMfaCode('')
+            }}
+          >
+            Voltar
+          </Button>
+        </form>
+      )}
 
-              <div className="space-y-2">
-                <Label htmlFor="mfa">Código de 6 dígitos</Label>
-                <Input
-                  id="mfa"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  pattern="\d{6}"
-                  required
-                  autoFocus
-                  placeholder="000000"
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
-                  className="text-center text-2xl tracking-widest"
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Verificar
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => {
-                  setStep('credentials')
-                  setError(null)
-                  setMfaCode('')
-                }}
-              >
-                Voltar
-              </Button>
-            </form>
-          )}
-        </CardContent>
-
-        <CardFooter className="flex flex-col gap-2 text-center">
-          <Link href="/recuperar-senha" className="text-sm text-blue-600 hover:underline">
-            Esqueci minha senha
-          </Link>
-          {allowRegistration && (
-            <p className="text-sm text-muted-foreground">
-              Primeiro acesso?{' '}
-              <Link href="/registro" className="text-blue-600 hover:underline">
-                Criar conta de administrador
-              </Link>
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Protegido por{' '}
-            <a
-              href="https://www.cloudflare.com/products/turnstile/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Cloudflare Turnstile
-            </a>{' '}
-            — sem cookies de rastreamento
+      <div className="mt-6 flex flex-col items-center gap-2 text-center">
+        <Link href="/recuperar-senha" className="text-sm text-blue-600 hover:underline">
+          Esqueci minha senha
+        </Link>
+        {allowRegistration && (
+          <p className="text-sm text-muted-foreground">
+            Primeiro acesso?{' '}
+            <Link href="/registro" className="text-blue-600 hover:underline">
+              Criar conta de administrador
+            </Link>
           </p>
-        </CardFooter>
-      </Card>
-    </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Protegido por{' '}
+          <a
+            href="https://www.cloudflare.com/products/turnstile/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Cloudflare Turnstile
+          </a>{' '}
+          — sem cookies de rastreamento
+        </p>
+      </div>
+    </AuthShell>
   )
 }
 
