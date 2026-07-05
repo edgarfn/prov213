@@ -14,6 +14,16 @@ COPY . .
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 ENV NODE_ENV=production
 
+# Variáveis NEXT_PUBLIC_* são inlined no bundle do cliente durante "next build"
+# — diferente das demais, definir só em docker-compose.yml "environment:" (que
+# só afeta o processo em RUNTIME) não tem efeito nenhum nelas. Precisam chegar
+# aqui, em build-time, via --build-arg (ver docker-compose.yml "build.args").
+# Sem isso, o bundle é compilado com a variável vazia/undefined e o widget do
+# Turnstile não é renderizado (ou passa a usar um valor desatualizado se a
+# imagem não for reconstruída após trocar o valor no .env).
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
+
 RUN npx prisma generate
 RUN npm run build
 

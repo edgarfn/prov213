@@ -1,8 +1,15 @@
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
 import { PrismaClient, type ClasseServentia } from '../app/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
+
+// 'dotenv/config' sozinho só carrega .env — diferente do Next.js (que também
+// aplica .env.local por cima como override em dev), deixando esta seed cega a
+// qualquer valor definido só em .env.local (foi a causa de ADMIN_EMAIL do
+// seed divergir do configurado em .env.local em dev).
+loadEnv()
+loadEnv({ path: '.env.local', override: true })
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
 const prisma = new PrismaClient({ adapter })

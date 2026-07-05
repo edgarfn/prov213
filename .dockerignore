@@ -3,6 +3,7 @@ node_modules
 .git
 *.md
 uploads
+.env
 .env.local
 .env.production
 ecosystem.config.js

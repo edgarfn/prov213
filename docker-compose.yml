@@ -24,6 +24,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # NEXT_PUBLIC_* precisa chegar em build-time (inlined no bundle do
+      # cliente pelo "next build") — repassar só em "environment:" abaixo
+      # (runtime) não tem efeito nela. Sempre que este valor mudar no .env,
+      # é necessário reconstruir a imagem ("docker compose build" ou
+      # "up -d --build"): um "docker compose up -d"/"restart" sozinho NÃO
+      # reconstrói e continua servindo o bundle antigo.
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: "${NEXT_PUBLIC_TURNSTILE_SITE_KEY:?defina NEXT_PUBLIC_TURNSTILE_SITE_KEY no .env}"
     container_name: prov213-app
     restart: unless-stopped
     ports:
