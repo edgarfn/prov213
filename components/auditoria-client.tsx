@@ -60,6 +60,8 @@ const ACOES_LABELS: Record<string, string> = {
   PAPEL_ALTERADO: 'Papel alterado',
   SERVENTIA_CRIADA: 'Serventia criada',
   SERVENTIA_ATUALIZADA: 'Serventia atualizada',
+  SERVENTIA_ATIVADA: 'Serventia ativada',
+  SERVENTIA_INATIVADA: 'Serventia inativada',
   PROGRESSO_ATUALIZADO: 'Progresso atualizado',
   ETAPA_DECLARADA: 'Etapa declarada',
   EVIDENCIA_UPLOAD: 'Evidência enviada',

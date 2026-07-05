@@ -1,22 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Building2, ChevronRight, Loader2, Plus } from 'lucide-react'
+import { Building2, ChevronRight, Loader2, Plus, Pencil, Power, PowerOff } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { EditarServentiaDialog, type ServentiaEditavel } from '@/components/editar-serventia-dialog'
+import { alternarAtivaServentia } from '@/app/actions/serventia'
 
 interface ServentiaItem {
   papel: string
-  serventia: {
-    id: string
-    nome: string
-    cns: string
+  serventia: ServentiaEditavel & {
     municipio: string
     uf: string
     classe: string
     onboardingConcluido: boolean
+    ativa: boolean
   }
 }
 
@@ -40,6 +41,9 @@ export default function SelecionarServentiaPage() {
   const [loading, setLoading] = useState(true)
   const [selecting, setSelecting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [editando, setEditando] = useState<ServentiaItem | null>(null)
+  const [confirmandoToggle, setConfirmandoToggle] = useState<ServentiaItem | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/usuario/serventias')
@@ -66,6 +70,40 @@ export default function SelecionarServentiaPage() {
     }
 
     window.location.href = '/dashboard'
+  }
+
+  function handleSaved(serventiaId: string, dadosNovos: Partial<ServentiaEditavel>) {
+    setServentias((prev) =>
+      prev.map((item) =>
+        item.serventia.id === serventiaId
+          ? { ...item, serventia: { ...item.serventia, ...dadosNovos } }
+          : item,
+      ),
+    )
+  }
+
+  async function handleConfirmarToggle() {
+    if (!confirmandoToggle) return
+    const novaAtiva = !confirmandoToggle.serventia.ativa
+    setTogglingId(confirmandoToggle.serventia.id)
+    setError(null)
+
+    const result = await alternarAtivaServentia(confirmandoToggle.serventia.id, novaAtiva)
+    setTogglingId(null)
+    setConfirmandoToggle(null)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    setServentias((prev) =>
+      prev.map((item) =>
+        item.serventia.id === confirmandoToggle.serventia.id
+          ? { ...item, serventia: { ...item.serventia, ativa: novaAtiva } }
+          : item,
+      ),
+    )
   }
 
   return (
@@ -108,56 +146,101 @@ export default function SelecionarServentiaPage() {
         <div className="space-y-3">
           {serventias.map((item) => {
             const isSelecting = selecting === item.serventia.id
+            const podeEditar = ['TITULAR', 'RESPONSAVEL_TECNICO'].includes(item.papel)
+            const podeAtivarInativar = item.papel === 'TITULAR'
+            const ativa = item.serventia.ativa
+
             return (
-              <button
+              <div
                 key={item.serventia.id}
-                onClick={() => handleSelect(item.serventia.id)}
-                disabled={!!selecting}
-                className="w-full text-left rounded-xl border bg-white p-4 hover:border-blue-400
-                           hover:shadow-sm transition-all focus:outline-none focus:ring-2
-                           focus:ring-blue-500 disabled:opacity-60"
+                className={`rounded-xl border bg-white p-4 transition-all ${
+                  ativa ? 'hover:border-blue-400 hover:shadow-sm' : 'opacity-75'
+                }`}
               >
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 flex-shrink-0">
-                    {isSelecting ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                    ) : (
-                      <Building2 className="h-5 w-5 text-blue-600" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">
-                      {item.serventia.nome}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.serventia.municipio}/{item.serventia.uf} · CNS{' '}
-                      {item.serventia.cns}
-                    </p>
-                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                      <Badge variant="outline" className="text-xs">
-                        {CLASSE_LABEL[item.serventia.classe] ?? item.serventia.classe}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="text-xs text-blue-700 border-blue-200 bg-blue-50"
-                      >
-                        {PAPEL_LABEL[item.papel] ?? item.papel}
-                      </Badge>
-                      {!item.serventia.onboardingConcluido && (
-                        <Badge
-                          variant="outline"
-                          className="text-xs text-amber-700 border-amber-200 bg-amber-50"
-                        >
-                          Configuração pendente
-                        </Badge>
+                  <button
+                    type="button"
+                    onClick={() => ativa && handleSelect(item.serventia.id)}
+                    disabled={!!selecting || !ativa}
+                    className="flex flex-1 items-center gap-4 text-left min-w-0 focus:outline-none disabled:cursor-not-allowed"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 flex-shrink-0">
+                      {isSelecting ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                      ) : (
+                        <Building2 className="h-5 w-5 text-blue-600" />
                       )}
                     </div>
-                  </div>
 
-                  <ChevronRight className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900 truncate">
+                        {item.serventia.nome}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.serventia.municipio}/{item.serventia.uf} · CNS{' '}
+                        {item.serventia.cns}
+                      </p>
+                      <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs">
+                          {CLASSE_LABEL[item.serventia.classe] ?? item.serventia.classe}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-xs text-blue-700 border-blue-200 bg-blue-50"
+                        >
+                          {PAPEL_LABEL[item.papel] ?? item.papel}
+                        </Badge>
+                        {!item.serventia.onboardingConcluido && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs text-amber-700 border-amber-200 bg-amber-50"
+                          >
+                            Configuração pendente
+                          </Badge>
+                        )}
+                        {!ativa && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs text-slate-500 border-slate-300 bg-slate-100"
+                          >
+                            Inativa
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {podeEditar && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                        title="Editar dados da serventia"
+                        onClick={(e) => { e.stopPropagation(); setEditando(item) }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {podeAtivarInativar && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`h-8 w-8 p-0 ${
+                          ativa
+                            ? 'text-slate-500 hover:text-red-600 hover:bg-red-50'
+                            : 'text-slate-500 hover:text-green-600 hover:bg-green-50'
+                        }`}
+                        title={ativa ? 'Inativar serventia' : 'Reativar serventia'}
+                        onClick={(e) => { e.stopPropagation(); setConfirmandoToggle(item) }}
+                      >
+                        {ativa ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                      </Button>
+                    )}
+                    {ativa && <ChevronRight className="h-5 w-5 text-slate-400" />}
+                  </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
@@ -173,6 +256,58 @@ export default function SelecionarServentiaPage() {
           Cadastrar nova serventia
         </Button>
       )}
+
+      {editando && (
+        <EditarServentiaDialog
+          serventia={editando.serventia}
+          open={!!editando}
+          onOpenChange={(o) => !o && setEditando(null)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      <Dialog open={!!confirmandoToggle} onOpenChange={(o) => !o && setConfirmandoToggle(null)}>
+        <DialogContent className="max-w-sm">
+          {confirmandoToggle && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {confirmandoToggle.serventia.ativa ? 'Inativar serventia?' : 'Reativar serventia?'}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                {confirmandoToggle.serventia.ativa ? (
+                  <p className="text-muted-foreground">
+                    <strong>{confirmandoToggle.serventia.nome}</strong> ficará inacessível para todos
+                    os usuários vinculados — ninguém conseguirá abrir checklists, registrar
+                    incidentes/vulnerabilidades ou acessar o dossiê enquanto estiver inativa. Todo o
+                    histórico e as evidências já registradas são preservados (retenção obrigatória de
+                    5 anos) e podem ser reativados a qualquer momento por um Titular.
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">
+                    <strong>{confirmandoToggle.serventia.nome}</strong> voltará a ficar acessível para
+                    todos os usuários vinculados.
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setConfirmandoToggle(null)} disabled={!!togglingId}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant={confirmandoToggle.serventia.ativa ? 'destructive' : 'default'}
+                    onClick={handleConfirmarToggle}
+                    disabled={!!togglingId}
+                  >
+                    {togglingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    {confirmandoToggle.serventia.ativa ? 'Inativar' : 'Reativar'}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

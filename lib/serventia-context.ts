@@ -17,17 +17,27 @@ export async function getActiveServentiaId(): Promise<string | null> {
   return store.get(SERVENTIA_COOKIE)?.value ?? null
 }
 
-/** Verifica se userId tem acesso ativo a serventiaId e retorna o membro */
+/**
+ * Verifica se userId tem acesso ativo a serventiaId e retorna o membro.
+ * Bloqueia também quando a própria serventia está inativa (ver
+ * Serventia.ativa) — mesmo um membro com vínculo ativo não pode operar
+ * numa serventia inativada. Reativação é feita fora deste caminho, via
+ * alternarAtivaServentia (app/actions/serventia.ts).
+ */
 export async function requireServentiaMembro(userId: string, serventiaId: string) {
   const membro = await db.membroServentia.findUnique({
     where: { userId_serventiaId: { userId, serventiaId } },
     include: { serventia: true },
   })
-  if (!membro || !membro.ativo) return null
+  if (!membro || !membro.ativo || !membro.serventia.ativa) return null
   return membro
 }
 
-/** Lista todas as serventias ativas de um usuário */
+/**
+ * Lista todas as serventias (ativas e inativas) de um usuário — inclui as
+ * inativas de propósito, para que a tela de seleção possa exibi-las e
+ * oferecer reativação a um TITULAR.
+ */
 export async function listUserServentias(userId: string) {
   const membros = await db.membroServentia.findMany({
     where: { userId, ativo: true },
@@ -37,10 +47,19 @@ export async function listUserServentias(userId: string) {
           id: true,
           nome: true,
           cns: true,
+          cnpj: true,
           municipio: true,
           uf: true,
           classe: true,
+          subclasse: true,
+          tipoSolucao: true,
+          infra: true,
+          dataVigenciaNorma: true,
+          responsavelTecnico: true,
+          controladorDados: true,
+          dpo: true,
           onboardingConcluido: true,
+          ativa: true,
         },
       },
     },

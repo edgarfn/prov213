@@ -206,6 +206,11 @@ model Serventia {
   responsavelTecnico       String?
   controladorDados         String?
   dpo                      String?
+  /// Inativação lógica (nunca exclusão física — retenção de 5 anos, Art. 7º,
+  /// IV). Serventia inativa bloqueia acesso operacional via
+  /// requireServentiaMembro, mas todo o histórico permanece consultável e
+  /// pode ser reativada a qualquer momento por um TITULAR.
+  ativa                    Boolean             @default(true)
   /// @deprecated Substituído pela tabela `Prorrogacao` (histórico completo,
   /// teto de 90 dias validado e fluxo simplificado/formal por classe).
   /// Mantidos por 1 ciclo de release para compatibilidade; não usar em código novo.

@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { criarServentia } from '@/app/actions/serventia'
 import { calcularClassePorArrecadacao, calcularSubclasse } from '@/lib/business-rules'
+import { ESTADOS, CLASSE_LABEL, TIPO_SOLUCAO_LABEL, INFRA_LABEL } from '@/lib/serventia-labels'
 import { ChevronRight, ChevronLeft, Info, Loader2 } from 'lucide-react'
 
 const STEPS = [
@@ -19,25 +20,6 @@ const STEPS = [
   { id: 3, title: 'Responsáveis', desc: 'Equipe de conformidade' },
   { id: 4, title: 'Revisão', desc: 'Confirmar e criar' },
 ]
-
-const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
-
-const CLASSE_LABEL: Record<string, string> = {
-  CLASSE_1: 'Classe 1 — Pequeno porte',
-  CLASSE_2: 'Classe 2 — Médio porte',
-  CLASSE_3: 'Classe 3 — Grande porte',
-}
-const TIPO_SOLUCAO_LABEL: Record<string, string> = {
-  PROPRIA: 'Própria — TI interna',
-  CONTRATADA: 'Contratada — empresa terceirizada',
-  COMPARTILHADA: 'Compartilhada — com outras serventias',
-  COLETIVA: 'Coletiva — solução conjunta do sistema notarial',
-}
-const INFRA_LABEL: Record<string, string> = {
-  LOCAL: 'Local — servidores físicos no cartório',
-  NUVEM: 'Nuvem — sistemas em cloud',
-  HIBRIDA: 'Híbrida — parte local, parte em nuvem',
-}
 
 export default function OnboardingPage() {
   const router = useRouter()

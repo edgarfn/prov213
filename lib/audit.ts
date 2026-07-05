@@ -35,6 +35,8 @@ export type AcaoAuditoria =
   // Serventias
   | 'SERVENTIA_CRIADA'
   | 'SERVENTIA_ATUALIZADA'
+  | 'SERVENTIA_ATIVADA'
+  | 'SERVENTIA_INATIVADA'
   // Progresso / Conformidade
   | 'PROGRESSO_ATUALIZADO'
   | 'ETAPA_DECLARADA'

@@ -92,11 +92,62 @@ export async function atualizarServentia(serventiaId: string, formData: FormData
   const parsed = serventiaSchema.partial().safeParse(raw)
   if (!parsed.success) return { error: 'Dados inválidos' }
 
-  await db.serventia.update({
+  const serventia = await db.serventia.update({
     where: { id: serventiaId },
     data: { ...parsed.data, onboardingConcluido: true },
   })
 
+  await logAudit({
+    serventiaId,
+    userId: session.user.id,
+    acao: 'SERVENTIA_ATUALIZADA',
+    entidade: 'Serventia',
+    entidadeId: serventia.id,
+    valorNovo: parsed.data,
+  })
+
+  revalidatePath('/dashboard')
+  revalidatePath('/selecionar-serventia')
+  return { success: true }
+}
+
+/**
+ * Ativar/inativar é uma decisão de maior impacto que editar detalhes: uma
+ * serventia inativa fica inacessível para TODOS os seus membros (ver
+ * requireServentiaMembro). Por isso, diferente de atualizarServentia
+ * (TITULAR ou RESPONSAVEL_TECNICO), esta ação é restrita a TITULAR.
+ *
+ * A checagem de permissão é feita direto em MembroServentia (não via
+ * requireServentiaMembro/getValidatedMembro), pois esse caminho já bloqueia
+ * serventias inativas — o TITULAR precisa conseguir reativar mesmo com a
+ * serventia já inativa.
+ */
+export async function alternarAtivaServentia(serventiaId: string, ativa: boolean) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return { error: 'Não autorizado' }
+
+  const membro = await db.membroServentia.findUnique({
+    where: { userId_serventiaId: { userId: session.user.id, serventiaId } },
+  })
+  if (!membro || membro.papel !== 'TITULAR') {
+    return { error: 'Apenas o Titular pode ativar ou inativar a serventia' }
+  }
+
+  const serventia = await db.serventia.update({
+    where: { id: serventiaId },
+    data: { ativa },
+  })
+
+  await logAudit({
+    serventiaId,
+    userId: session.user.id,
+    acao: ativa ? 'SERVENTIA_ATIVADA' : 'SERVENTIA_INATIVADA',
+    entidade: 'Serventia',
+    entidadeId: serventia.id,
+    valorNovo: { ativa },
+  })
+
+  revalidatePath('/selecionar-serventia')
   revalidatePath('/dashboard')
   return { success: true }
 }
