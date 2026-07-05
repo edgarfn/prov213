@@ -121,7 +121,12 @@ export function RelatoriosClient({ classe, etapas }: Props) {
               </p>
               <Select value={etapaSelecionada} onValueChange={(v) => v && setEtapaSelecionada(v)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a etapa" />
+                  <SelectValue>
+                    {(id: string) => {
+                      const e = etapas.find((x) => x.id === id)
+                      return e ? `Etapa ${e.numero} — ${e.titulo}` : 'Selecione a etapa'
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {etapas.map((e) => (

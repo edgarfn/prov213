@@ -38,7 +38,17 @@ export async function GET(req: NextRequest) {
     db.incidente.findMany({ where: { serventiaId: serventia.id } }),
     db.vulnerabilidade.findMany({ where: { serventiaId: serventia.id } }),
     db.testeRestauracao.findMany({ where: { serventiaId: serventia.id }, orderBy: { dataTeste: 'desc' } }),
-    db.evidencia.count({ where: { deletedAt: null, progressoRequisito: { serventiaId: serventia.id } } }),
+    db.evidencia.count({
+      where: {
+        deletedAt: null,
+        OR: [
+          { progressoRequisito: { serventiaId: serventia.id } },
+          { testeRestauracao: { serventiaId: serventia.id } },
+          { incidente: { serventiaId: serventia.id } },
+          { vulnerabilidade: { serventiaId: serventia.id } },
+        ],
+      },
+    }),
   ])
 
   const prorrogacaoNovaData = await getProrrogacaoAtivaData(serventia.id)

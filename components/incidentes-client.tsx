@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,10 +18,14 @@ import {
 } from '@/app/actions/incidentes'
 import { prazoIncidenteCritico, calcularSemaforo } from '@/lib/business-rules'
 import { InfoTooltip } from '@/components/info-tooltip'
-import type { Incidente, RolePapel } from '@/types/prisma'
+import { EvidenciasUpload } from '@/components/evidencias-upload'
+import type { Incidente, Evidencia, RolePapel } from '@/types/prisma'
 import { format, differenceInHours } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { AlertTriangle, Plus, ShieldAlert, Clock, CheckCircle2, Send } from 'lucide-react'
+import {
+  AlertTriangle, Plus, ShieldAlert, Clock, CheckCircle2, Send,
+  FileDown, History, UserCircle, Filter,
+} from 'lucide-react'
 
 const GRAVIDADE_COR: Record<string, string> = {
   BAIXO: 'text-slate-600 border-slate-200 bg-slate-50',
@@ -36,31 +40,115 @@ const STATUS_LABEL: Record<string, string> = {
   ENCERRADO: 'Encerrado',
 }
 
+const GRAVIDADE_LABEL: Record<string, string> = {
+  BAIXO: 'Baixo', MEDIO: 'Médio', ALTO: 'Alto', CRITICO: 'Crítico',
+}
+
+const SIM_NAO_LABEL: Record<string, string> = { true: 'Sim', false: 'Não' }
+
+// Base UI só resolve o rótulo do valor selecionado a partir dos <SelectItem>
+// já montados no DOM (isto é, depois que o dropdown foi aberto ao menos uma
+// vez) — sem isso, o gatilho fechado mostra o valor bruto (ex.: "MEDIO" em
+// vez de "Médio"). Passar a função de mapeamento como children resolve o
+// rótulo imediatamente, sem depender da montagem do popup.
+function selectLabel(map: Record<string, string>) {
+  return (value: unknown) => map[String(value)] ?? String(value)
+}
+
+const CATEGORIA_LABEL: Record<string, string> = {
+  ACESSO_NAO_AUTORIZADO: 'Acesso não autorizado',
+  MALWARE_RANSOMWARE: 'Malware/Ransomware',
+  VAZAMENTO_DADOS: 'Vazamento de dados',
+  INDISPONIBILIDADE_DOS: 'Indisponibilidade/DoS',
+  PHISHING_ENGENHARIA_SOCIAL: 'Phishing/Engenharia social',
+  FALHA_CONFIGURACAO: 'Falha de configuração',
+  PERDA_ROUBO_DISPOSITIVO: 'Perda/roubo de dispositivo',
+  FISICO: 'Incidente físico',
+  OUTRO: 'Outro',
+}
+
+const TIMELINE_LABEL: Record<string, string> = {
+  INCIDENTE_CRIADO: 'Incidente registrado',
+  INCIDENTE_ATUALIZADO: 'Detalhes atualizados',
+  INCIDENTE_COMUNICADO_CORREGEDORIA: 'Comunicado à Corregedoria marcado',
+  INCIDENTE_COMUNICADO_ANPD: 'Comunicado à ANPD marcado',
+  INCIDENTE_COMUNICADO_GERADO: 'PDF de comunicado gerado',
+  INCIDENTE_ENCERRADO: 'Incidente encerrado',
+  EVIDENCIA_UPLOAD: 'Evidência anexada',
+  EVIDENCIA_EXCLUIDA: 'Evidência excluída',
+}
+
 const FORM_INITIAL = {
-  titulo: '', descricao: '', dataOcorrencia: '', dataCiencia: '', gravidade: 'MEDIO',
+  titulo: '', descricao: '', categoria: 'OUTRO', dataOcorrencia: '', dataCiencia: '', gravidade: 'MEDIO',
+  responsavelId: '_none', dadosPessoaisEnvolvidos: 'false',
+  categoriasDadosAfetados: '', quantidadeTitularesAfetados: '', riscosTitulares: '',
+}
+
+type IncidenteComRelacoes = Incidente & {
+  responsavel: { name: string | null; email: string } | null
+  evidencias: Evidencia[]
+}
+
+interface TimelineEntry {
+  id: string
+  acao: string
+  userEmail?: string | null
+  userName?: string | null
+  timestamp: string
 }
 
 interface Props {
   serventiaId: string
-  incidentes: Incidente[]
+  incidentes: IncidenteComRelacoes[]
+  usuarios: { id: string; name: string | null; email: string }[]
   papelAtual: RolePapel
+  retencaoAnos: number
 }
 
-export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props) {
+export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual, retencaoAnos }: Props) {
   const [createOpen, setCreateOpen] = useState(false)
-  const [selected, setSelected] = useState<Incidente | null>(null)
+  const [selected, setSelected] = useState<IncidenteComRelacoes | null>(null)
   const [form, setForm] = useState(FORM_INITIAL)
-  const [causaRaiz, setCausaRaiz] = useState('')
-  const [medidas, setMedidas] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const somenteLeitura = papelAtual === 'AUDITOR_LEITURA'
 
-  function abrirDetalhe(inc: Incidente) {
+  // Filtros da lista
+  const [filtroStatus, setFiltroStatus] = useState('_todos')
+  const [filtroGravidade, setFiltroGravidade] = useState('_todos')
+
+  // Edição do incidente selecionado
+  const [causaRaiz, setCausaRaiz] = useState('')
+  const [medidas, setMedidas] = useState('')
+  const [categoria, setCategoria] = useState('OUTRO')
+  const [responsavelId, setResponsavelId] = useState('_none')
+  const [dadosPessoaisEnvolvidos, setDadosPessoaisEnvolvidos] = useState(false)
+  const [categoriasDadosAfetados, setCategoriasDadosAfetados] = useState('')
+  const [quantidadeTitularesAfetados, setQuantidadeTitularesAfetados] = useState('')
+  const [riscosTitulares, setRiscosTitulares] = useState('')
+
+  // Timeline do incidente selecionado
+  const [timeline, setTimeline] = useState<TimelineEntry[] | null>(null)
+  const [timelineLoading, setTimelineLoading] = useState(false)
+
+  function abrirDetalhe(inc: IncidenteComRelacoes) {
     setSelected(inc)
     setCausaRaiz(inc.causaRaiz ?? '')
     setMedidas(inc.medidasCorretivas ?? '')
+    setCategoria(inc.categoria)
+    setResponsavelId(inc.responsavelId ?? '_none')
+    setDadosPessoaisEnvolvidos(inc.dadosPessoaisEnvolvidos)
+    setCategoriasDadosAfetados(inc.categoriasDadosAfetados ?? '')
+    setQuantidadeTitularesAfetados(inc.quantidadeTitularesAfetados?.toString() ?? '')
+    setRiscosTitulares(inc.riscosTitulares ?? '')
     setError(null)
+    setTimeline(null)
+    setTimelineLoading(true)
+    fetch(`/api/incidentes/${inc.id}/timeline`)
+      .then((r) => r.json())
+      .then((d) => setTimeline(d.entradas ?? []))
+      .catch(() => setTimeline([]))
+      .finally(() => setTimelineLoading(false))
   }
 
   function handleCreate(e: React.FormEvent) {
@@ -76,13 +164,24 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
     })
   }
 
+  const buildDetalhesFd = useCallback((extra?: Record<string, string>) => {
+    const fd = new FormData()
+    fd.append('causaRaiz', causaRaiz)
+    fd.append('medidasCorretivas', medidas)
+    fd.append('categoria', categoria)
+    fd.append('responsavelId', responsavelId)
+    fd.append('dadosPessoaisEnvolvidos', String(dadosPessoaisEnvolvidos))
+    fd.append('categoriasDadosAfetados', categoriasDadosAfetados)
+    fd.append('quantidadeTitularesAfetados', quantidadeTitularesAfetados)
+    fd.append('riscosTitulares', riscosTitulares)
+    if (extra) Object.entries(extra).forEach(([k, v]) => fd.append(k, v))
+    return fd
+  }, [causaRaiz, medidas, categoria, responsavelId, dadosPessoaisEnvolvidos, categoriasDadosAfetados, quantidadeTitularesAfetados, riscosTitulares])
+
   function handleUpdateStatus(status: string) {
     if (!selected) return
     setError(null)
-    const fd = new FormData()
-    fd.append('status', status)
-    fd.append('causaRaiz', causaRaiz)
-    fd.append('medidasCorretivas', medidas)
+    const fd = buildDetalhesFd({ status })
     startTransition(async () => {
       const result = await atualizarIncidente(serventiaId, selected.id, fd)
       if (result.error) { setError(result.error); return }
@@ -90,16 +189,20 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
     })
   }
 
-  function handleSalvarAnalise() {
+  function handleSalvarDetalhes() {
     if (!selected) return
     setError(null)
-    const fd = new FormData()
-    fd.append('causaRaiz', causaRaiz)
-    fd.append('medidasCorretivas', medidas)
+    const fd = buildDetalhesFd()
     startTransition(async () => {
       const result = await atualizarIncidente(serventiaId, selected.id, fd)
       if (result.error) setError(result.error)
     })
+  }
+
+  function usuarioLabel(id: unknown) {
+    if (id === '_none' || !id) return 'Não atribuído'
+    const u = usuarios.find((x) => x.id === id)
+    return u ? (u.name ?? u.email) : String(id)
   }
 
   function prazoInfo(inc: Incidente) {
@@ -109,6 +212,32 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
     const horasRestantes = differenceInHours(prazo, new Date())
     return { prazo, semaforo, horasRestantes }
   }
+
+  // ─── KPIs ──────────────────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    const abertos = incidentes.filter((i) => i.status !== 'ENCERRADO')
+    const criticosVencendoOuVencidos = incidentes.filter((i) => {
+      if (i.status === 'ENCERRADO' || i.comunicadoCorregedoria || i.gravidade !== 'CRITICO') return false
+      const p = prazoInfo(i)
+      return p ? p.semaforo !== 'verde' : false
+    })
+    const encerrados = incidentes.filter((i) => i.status === 'ENCERRADO')
+    return {
+      total: incidentes.length,
+      abertos: abertos.length,
+      criticosAtencao: criticosVencendoOuVencidos.length,
+      encerrados: encerrados.length,
+    }
+  }, [incidentes])
+
+  // ─── Filtros ────────────────────────────────────────────────────────────────
+  const incidentesFiltrados = useMemo(() => {
+    return incidentes.filter((i) => {
+      if (filtroStatus !== '_todos' && i.status !== filtroStatus) return false
+      if (filtroGravidade !== '_todos' && i.gravidade !== filtroGravidade) return false
+      return true
+    })
+  }, [incidentes, filtroStatus, filtroGravidade])
 
   return (
     <div className="space-y-6">
@@ -126,6 +255,59 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
         )}
       </div>
 
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="text-2xl font-bold">{kpis.total}</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Em aberto</p>
+          <p className="text-2xl font-bold text-amber-600">{kpis.abertos}</p>
+        </CardContent></Card>
+        <Card className={kpis.criticosAtencao > 0 ? 'border-red-200' : ''}><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Críticos exigindo atenção (72h)</p>
+          <p className={`text-2xl font-bold ${kpis.criticosAtencao > 0 ? 'text-red-600' : ''}`}>{kpis.criticosAtencao}</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Encerrados</p>
+          <p className="text-2xl font-bold text-green-600">{kpis.encerrados}</p>
+        </CardContent></Card>
+      </div>
+
+      {/* Filtros */}
+      {incidentes.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+          <Select value={filtroStatus} onValueChange={(v) => v && setFiltroStatus(v)}>
+            <SelectTrigger className="w-44 h-8 text-xs">
+              <SelectValue>{selectLabel({ _todos: 'Todos os status', ...STATUS_LABEL })}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_todos">Todos os status</SelectItem>
+              <SelectItem value="ABERTO">Aberto</SelectItem>
+              <SelectItem value="EM_TRATAMENTO">Em tratamento</SelectItem>
+              <SelectItem value="ENCERRADO">Encerrado</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filtroGravidade} onValueChange={(v) => v && setFiltroGravidade(v)}>
+            <SelectTrigger className="w-44 h-8 text-xs">
+              <SelectValue>{selectLabel({ _todos: 'Todas as gravidades', ...GRAVIDADE_LABEL })}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_todos">Todas as gravidades</SelectItem>
+              <SelectItem value="BAIXO">Baixo</SelectItem>
+              <SelectItem value="MEDIO">Médio</SelectItem>
+              <SelectItem value="ALTO">Alto</SelectItem>
+              <SelectItem value="CRITICO">Crítico</SelectItem>
+            </SelectContent>
+          </Select>
+          {(filtroStatus !== '_todos' || filtroGravidade !== '_todos') && (
+            <span className="text-xs text-muted-foreground">{incidentesFiltrados.length} de {incidentes.length}</span>
+          )}
+        </div>
+      )}
+
       {incidentes.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
@@ -133,9 +315,15 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
             <p>Nenhum incidente registrado.</p>
           </CardContent>
         </Card>
+      ) : incidentesFiltrados.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground text-sm">
+            Nenhum incidente corresponde aos filtros selecionados.
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-3">
-          {incidentes.map((inc) => {
+          {incidentesFiltrados.map((inc) => {
             const prazo = prazoInfo(inc)
             return (
               <Card
@@ -149,6 +337,12 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className={`text-xs ${GRAVIDADE_COR[inc.gravidade]}`}>{inc.gravidade}</Badge>
                         <Badge variant="outline" className="text-xs">{STATUS_LABEL[inc.status]}</Badge>
+                        <Badge variant="outline" className="text-xs text-slate-500">{CATEGORIA_LABEL[inc.categoria]}</Badge>
+                        {inc.dadosPessoaisEnvolvidos && (
+                          <Badge variant="outline" className="text-xs text-purple-600 border-purple-200 bg-purple-50">
+                            Dados pessoais
+                          </Badge>
+                        )}
                         {inc.comunicadoCorregedoria && (
                           <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50">
                             <CheckCircle2 className="h-3 w-3 mr-1" />Corregedoria comunicada
@@ -161,9 +355,20 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
                         )}
                       </div>
                       <p className="font-medium text-sm mt-1.5">{inc.titulo}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Ciência em {format(inc.dataCiencia, 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                      </p>
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                        <p className="text-xs text-muted-foreground">
+                          Ciência em {format(inc.dataCiencia, 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                        </p>
+                        {inc.responsavel && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <UserCircle className="h-3 w-3" />
+                            {inc.responsavel.name ?? inc.responsavel.email}
+                          </span>
+                        )}
+                        {inc.evidencias.length > 0 && (
+                          <span className="text-xs text-muted-foreground">{inc.evidencias.length} evidência(s)</span>
+                        )}
+                      </div>
                     </div>
                     {prazo && inc.status !== 'ENCERRADO' && !inc.comunicadoCorregedoria && (
                       <Badge
@@ -187,7 +392,7 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
 
       {/* Criar incidente */}
       <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Registrar incidente de segurança</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
@@ -198,6 +403,20 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
             <div className="space-y-1.5">
               <Label>Descrição *</Label>
               <Textarea rows={3} value={form.descricao} onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                Categoria
+                <InfoTooltip chave="CATEGORIA_INCIDENTE" />
+              </Label>
+              <Select value={form.categoria} onValueChange={(v) => v && setForm((p) => ({ ...p, categoria: v }))}>
+                <SelectTrigger><SelectValue>{selectLabel(CATEGORIA_LABEL)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CATEGORIA_LABEL).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -215,7 +434,7 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
                 <InfoTooltip chave="GRAVIDADE_INCIDENTE" />
               </Label>
               <Select value={form.gravidade} onValueChange={(v) => v && setForm((p) => ({ ...p, gravidade: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue>{selectLabel(GRAVIDADE_LABEL)}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="BAIXO">Baixo</SelectItem>
                   <SelectItem value="MEDIO">Médio</SelectItem>
@@ -224,6 +443,55 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label>Responsável pelo tratamento</Label>
+              <Select value={form.responsavelId} onValueChange={(v) => v && setForm((p) => ({ ...p, responsavelId: v }))}>
+                <SelectTrigger><SelectValue>{usuarioLabel}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Não atribuído</SelectItem>
+                  {usuarios.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name ?? u.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                Dados pessoais envolvidos?
+                <InfoTooltip chave="DADOS_PESSOAIS_ENVOLVIDOS" />
+              </Label>
+              <Select
+                value={form.dadosPessoaisEnvolvidos}
+                onValueChange={(v) => v && setForm((p) => ({ ...p, dadosPessoaisEnvolvidos: v }))}
+              >
+                <SelectTrigger><SelectValue>{selectLabel(SIM_NAO_LABEL)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="false">Não</SelectItem>
+                  <SelectItem value="true">Sim</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.dadosPessoaisEnvolvidos === 'true' && (
+              <div className="space-y-3 rounded-lg border border-purple-100 bg-purple-50 p-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Categorias de dados afetados</Label>
+                  <Input
+                    placeholder="Ex.: CPF, nome completo, endereço"
+                    value={form.categoriasDadosAfetados}
+                    onChange={(e) => setForm((p) => ({ ...p, categoriasDadosAfetados: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Quantidade estimada de titulares afetados</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.quantidadeTitularesAfetados}
+                    onChange={(e) => setForm((p) => ({ ...p, quantidadeTitularesAfetados: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
               <Button type="submit" disabled={isPending}>Registrar</Button>
@@ -234,7 +502,7 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
 
       {/* Detalhe / atualização */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           {selected && (
             <>
               <DialogHeader><DialogTitle>{selected.titulo}</DialogTitle></DialogHeader>
@@ -276,6 +544,107 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
                   </div>
                 )}
 
+                {/* Geração de comunicado formal em PDF */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    size="sm" variant="ghost"
+                    onClick={() => window.open(`/api/incidentes/${selected.id}/comunicado?destino=CORREGEDORIA`, '_blank')}
+                  >
+                    <FileDown className="h-3.5 w-3.5 mr-1.5" /> Gerar comunicado (Corregedoria)
+                  </Button>
+                  {selected.dadosPessoaisEnvolvidos && (
+                    <Button
+                      size="sm" variant="ghost"
+                      onClick={() => window.open(`/api/incidentes/${selected.id}/comunicado?destino=ANPD`, '_blank')}
+                    >
+                      <FileDown className="h-3.5 w-3.5 mr-1.5" /> Gerar comunicado (ANPD)
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-xs">
+                      Categoria
+                      <InfoTooltip chave="CATEGORIA_INCIDENTE" />
+                    </Label>
+                    <Select value={categoria} onValueChange={(v) => v && setCategoria(v)} disabled={somenteLeitura}>
+                      <SelectTrigger className="text-sm"><SelectValue>{selectLabel(CATEGORIA_LABEL)}</SelectValue></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CATEGORIA_LABEL).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Responsável</Label>
+                    <Select value={responsavelId} onValueChange={(v) => v && setResponsavelId(v)} disabled={somenteLeitura}>
+                      <SelectTrigger className="text-sm"><SelectValue>{usuarioLabel}</SelectValue></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Não atribuído</SelectItem>
+                        {usuarios.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>{u.name ?? u.email}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    Dados pessoais envolvidos?
+                    <InfoTooltip chave="DADOS_PESSOAIS_ENVOLVIDOS" />
+                  </Label>
+                  <Select
+                    value={dadosPessoaisEnvolvidos ? 'true' : 'false'}
+                    onValueChange={(v) => v && setDadosPessoaisEnvolvidos(v === 'true')}
+                    disabled={somenteLeitura}
+                  >
+                    <SelectTrigger><SelectValue>{selectLabel(SIM_NAO_LABEL)}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="false">Não</SelectItem>
+                      <SelectItem value="true">Sim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {dadosPessoaisEnvolvidos && (
+                  <div className="space-y-3 rounded-lg border border-purple-100 bg-purple-50 p-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Categorias de dados afetados</Label>
+                      <Input
+                        placeholder="Ex.: CPF, nome completo, endereço"
+                        value={categoriasDadosAfetados}
+                        onChange={(e) => setCategoriasDadosAfetados(e.target.value)}
+                        disabled={somenteLeitura}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Quantidade estimada de titulares afetados</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={quantidadeTitularesAfetados}
+                        onChange={(e) => setQuantidadeTitularesAfetados(e.target.value)}
+                        disabled={somenteLeitura}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        Riscos aos titulares
+                        <InfoTooltip chave="RISCOS_TITULARES" />
+                      </Label>
+                      <Textarea
+                        rows={2}
+                        value={riscosTitulares}
+                        onChange={(e) => setRiscosTitulares(e.target.value)}
+                        disabled={somenteLeitura}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1.5">
                     Análise de causa raiz
@@ -290,7 +659,7 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
 
                 {!somenteLeitura && (
                   <div className="flex justify-between pt-2">
-                    <Button size="sm" variant="ghost" disabled={isPending} onClick={handleSalvarAnalise}>Salvar análise</Button>
+                    <Button size="sm" variant="ghost" disabled={isPending} onClick={handleSalvarDetalhes}>Salvar</Button>
                     <div className="flex gap-2">
                       {selected.status !== 'EM_TRATAMENTO' && selected.status !== 'ENCERRADO' && (
                         <Button size="sm" variant="outline" disabled={isPending} onClick={() => handleUpdateStatus('EM_TRATAMENTO')}>Em tratamento</Button>
@@ -301,6 +670,44 @@ export function IncidentesClient({ serventiaId, incidentes, papelAtual }: Props)
                     </div>
                   </div>
                 )}
+
+                {/* Evidências */}
+                <EvidenciasUpload
+                  serventiaId={serventiaId}
+                  incidenteId={selected.id}
+                  evidencias={selected.evidencias}
+                  podeEditar={!somenteLeitura}
+                  podeExcluir={['TITULAR', 'RESPONSAVEL_TECNICO'].includes(papelAtual)}
+                  retencaoAnos={retencaoAnos}
+                />
+
+                {/* Linha do tempo */}
+                <div className="space-y-1.5 pt-2 border-t">
+                  <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <History className="h-3.5 w-3.5" /> Histórico
+                  </Label>
+                  {timelineLoading ? (
+                    <p className="text-xs text-muted-foreground">Carregando…</p>
+                  ) : !timeline || timeline.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum evento registrado ainda.</p>
+                  ) : (
+                    <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {timeline.map((t) => (
+                        <li key={t.id} className="text-xs flex items-start gap-2">
+                          <span className="text-muted-foreground flex-shrink-0 w-28">
+                            {format(new Date(t.timestamp), 'dd/MM/yy HH:mm', { locale: ptBR })}
+                          </span>
+                          <span className="flex-1">
+                            {TIMELINE_LABEL[t.acao] ?? t.acao}
+                            {(t.userName || t.userEmail) && (
+                              <span className="text-muted-foreground"> — {t.userName ?? t.userEmail}</span>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             </>
           )}

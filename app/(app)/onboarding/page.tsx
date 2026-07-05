@@ -22,6 +22,23 @@ const STEPS = [
 
 const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
+const CLASSE_LABEL: Record<string, string> = {
+  CLASSE_1: 'Classe 1 — Pequeno porte',
+  CLASSE_2: 'Classe 2 — Médio porte',
+  CLASSE_3: 'Classe 3 — Grande porte',
+}
+const TIPO_SOLUCAO_LABEL: Record<string, string> = {
+  PROPRIA: 'Própria — TI interna',
+  CONTRATADA: 'Contratada — empresa terceirizada',
+  COMPARTILHADA: 'Compartilhada — com outras serventias',
+  COLETIVA: 'Coletiva — solução conjunta do sistema notarial',
+}
+const INFRA_LABEL: Record<string, string> = {
+  LOCAL: 'Local — servidores físicos no cartório',
+  NUVEM: 'Nuvem — sistemas em cloud',
+  HIBRIDA: 'Híbrida — parte local, parte em nuvem',
+}
+
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
@@ -236,7 +253,9 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label>Classe da Serventia *</Label>
                 <Select value={dados.classe} onValueChange={(v) => { if (v) atualizar('classe', v) }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione a classe" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue>{(v: string) => (v ? CLASSE_LABEL[v] ?? v : 'Selecione a classe')}</SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="CLASSE_1">Classe 1 — Pequeno porte</SelectItem>
                     <SelectItem value="CLASSE_2">Classe 2 — Médio porte</SelectItem>
@@ -259,7 +278,11 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label>Tipo de Solução de TIC *</Label>
                 <Select value={dados.tipoSolucao} onValueChange={(v) => { if (v) atualizar('tipoSolucao', v) }}>
-                  <SelectTrigger><SelectValue placeholder="Como os sistemas são gerenciados?" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue>
+                      {(v: string) => (v ? TIPO_SOLUCAO_LABEL[v] ?? v : 'Como os sistemas são gerenciados?')}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PROPRIA">Própria — TI interna</SelectItem>
                     <SelectItem value="CONTRATADA">Contratada — empresa terceirizada</SelectItem>
@@ -272,7 +295,9 @@ export default function OnboardingPage() {
               <div className="space-y-2">
                 <Label>Infraestrutura *</Label>
                 <Select value={dados.infra} onValueChange={(v) => { if (v) atualizar('infra', v) }}>
-                  <SelectTrigger><SelectValue placeholder="Onde ficam os sistemas?" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue>{(v: string) => (v ? INFRA_LABEL[v] ?? v : 'Onde ficam os sistemas?')}</SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="LOCAL">Local — servidores físicos no cartório</SelectItem>
                     <SelectItem value="NUVEM">Nuvem — sistemas em cloud</SelectItem>

@@ -14,6 +14,7 @@ import {
   dataLimiteRetencaoEvidencia,
   proximoTesteRestauracaoDevido,
   testeRestauracaoAtrasado,
+  classificacaoRiscoPorCvss,
 } from '../lib/business-rules'
 
 const VIGENCIA = new Date('2026-01-01')
@@ -142,6 +143,28 @@ describe('prazoVulnerabilidade', () => {
     const base = new Date('2026-01-01')
     const prazo = prazoVulnerabilidade(base, false)
     expect(prazo).toEqual(addDays(base, 30))
+  })
+})
+
+describe('classificacaoRiscoPorCvss', () => {
+  it('9.0–10.0 é CRITICO', () => {
+    expect(classificacaoRiscoPorCvss(9.0)).toBe('CRITICO')
+    expect(classificacaoRiscoPorCvss(10.0)).toBe('CRITICO')
+  })
+
+  it('7.0–8.9 é ALTO', () => {
+    expect(classificacaoRiscoPorCvss(7.0)).toBe('ALTO')
+    expect(classificacaoRiscoPorCvss(8.9)).toBe('ALTO')
+  })
+
+  it('4.0–6.9 é MEDIO', () => {
+    expect(classificacaoRiscoPorCvss(4.0)).toBe('MEDIO')
+    expect(classificacaoRiscoPorCvss(6.9)).toBe('MEDIO')
+  })
+
+  it('abaixo de 4.0 é BAIXO', () => {
+    expect(classificacaoRiscoPorCvss(0)).toBe('BAIXO')
+    expect(classificacaoRiscoPorCvss(3.9)).toBe('BAIXO')
   })
 })
 

@@ -24,9 +24,11 @@ const TIPOS_EVIDENCIA = [
 
 interface EvidenciasUploadProps {
   serventiaId: string
-  /** Origem da evidência — exatamente uma das duas deve ser informada */
+  /** Origem da evidência — exatamente uma delas deve ser informada */
   requisitoId?: string
   testeRestauracaoId?: string
+  incidenteId?: string
+  vulnerabilidadeId?: string
   evidencias: Evidencia[]
   /** Se false, esconde os botões de ação (modo leitura) */
   podeEditar?: boolean
@@ -47,6 +49,8 @@ export function EvidenciasUpload({
   serventiaId,
   requisitoId,
   testeRestauracaoId,
+  incidenteId,
+  vulnerabilidadeId,
   evidencias,
   podeEditar = true,
   podeExcluir = true,
@@ -78,6 +82,8 @@ export function EvidenciasUpload({
     fd.append('serventiaId', serventiaId)
     if (requisitoId) fd.append('requisitoId', requisitoId)
     if (testeRestauracaoId) fd.append('testeRestauracaoId', testeRestauracaoId)
+    if (incidenteId) fd.append('incidenteId', incidenteId)
+    if (vulnerabilidadeId) fd.append('vulnerabilidadeId', vulnerabilidadeId)
     fd.append('tipo', tipo)
 
     try {
@@ -217,7 +223,7 @@ export function EvidenciasUpload({
                         onValueChange={(v) => { if (v) setEditando((p) => p ? { ...p, tipo: v } : null) }}
                       >
                         <SelectTrigger className="w-36 h-8 text-xs">
-                          <SelectValue />
+                          <SelectValue>{labelTipo}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {TIPOS_EVIDENCIA.map((t) => (
@@ -384,7 +390,7 @@ export function EvidenciasUpload({
           <div className="flex items-center gap-2">
             <Select value={tipo} onValueChange={(v) => { if (v) setTipo(v) }}>
               <SelectTrigger className="w-36">
-                <SelectValue />
+                <SelectValue>{labelTipo}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {TIPOS_EVIDENCIA.map((t) => (

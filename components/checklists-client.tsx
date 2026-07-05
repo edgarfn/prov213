@@ -326,7 +326,9 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
                                   <label className="text-xs font-medium">Status</label>
                                   <Select name="status" defaultValue={status}>
                                     <SelectTrigger>
-                                      <SelectValue />
+                                      <SelectValue>
+                                        {(v: StatusRequisito) => STATUS_CONFIG[v]?.label ?? v}
+                                      </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="NAO_INICIADO">Não iniciado</SelectItem>

@@ -36,6 +36,30 @@ export const EXPLICACOES_LEIGO = {
   MEDIDAS_CORRETIVAS:
     'Providências concretas para resolver o que deu errado (ou para melhorar ainda mais) quando o teste não ' +
     'atinge conformidade integral — exigido pelo Anexo V, item 8.',
+  CATEGORIA_INCIDENTE:
+    'Tipo do incidente, usado para organizar o histórico e identificar padrões (ex.: vários incidentes de ' +
+    'phishing podem indicar necessidade de treinamento da equipe).',
+  DADOS_PESSOAIS_ENVOLVIDOS:
+    'Marque "sim" se o incidente pode ter exposto dados de pessoas (CPF, nome, endereço, dados de clientes ' +
+    'etc.). Isso muda o que precisa ser informado e pode exigir aviso à ANPD (LGPD, Art. 48).',
+  RISCOS_TITULARES:
+    'Descreva o que pode acontecer com as pessoas cujos dados foram afetados (ex.: risco de golpe, ' +
+    'constrangimento, discriminação) — informação exigida pela ANPD ao avaliar a gravidade do incidente.',
+  CVSS_SCORE:
+    'CVSS (Common Vulnerability Scoring System) é uma nota de 0 a 10 usada no mercado para medir a ' +
+    'gravidade técnica de uma falha (quanto maior, mais grave). Se você tiver essa nota de um scanner ou ' +
+    'relatório de pentest, o sistema sugere automaticamente a classificação de risco a partir dela.',
+  ORIGEM_VULNERABILIDADE:
+    'Como essa vulnerabilidade foi descoberta — ajuda a entender se seus mecanismos de detecção (scanner, ' +
+    'pentest, monitoramento) estão funcionando bem.',
+  STATUS_VULNERABILIDADE:
+    'Em que ponto do tratamento a vulnerabilidade está: identificada (ainda não tratada), em correção, ' +
+    'corrigida (resolvida), risco aceito (decisão formal de não corrigir agora) ou falso positivo (não era ' +
+    'uma vulnerabilidade real).',
+  RISCO_ACEITO:
+    '"Risco aceito" significa que a serventia decidiu, formalmente e por escrito, conviver com essa falha ' +
+    'em vez de corrigi-la agora (ex.: custo desproporcional, mitigação já suficiente por outro controle). ' +
+    'Diferente de simplesmente ignorar o problema — exige justificativa registrada e é auditável.',
 } as const
 
 export type ExplicacaoLeigoChave = keyof typeof EXPLICACOES_LEIGO

@@ -1,6 +1,7 @@
 import { addDays, addMonths, addYears, isAfter, isBefore, differenceInDays } from 'date-fns'
 import type { ClasseServentia } from '@/app/generated/prisma/enums'
 import type { SubclasseServentia } from '@/app/generated/prisma/enums'
+import type { ClassificacaoRisco } from '@/app/generated/prisma/enums'
 
 export interface PrazoEtapa {
   etapas12: Date
@@ -117,6 +118,19 @@ export function prazoVulnerabilidade(dataIdentificacao: Date, exploracaoAtiva: b
     return new Date(dataIdentificacao.getTime() + 72 * 60 * 60 * 1000)
   }
   return addDays(dataIdentificacao, 30)
+}
+
+/**
+ * Faixas qualitativas do CVSS v3.1 (FIRST.org) — usada só para SUGERIR a
+ * classificação de risco a partir de uma pontuação CVSS informada; a
+ * classificação final continua sendo uma escolha humana editável, não uma
+ * trava automática.
+ */
+export function classificacaoRiscoPorCvss(score: number): ClassificacaoRisco {
+  if (score >= 9.0) return 'CRITICO'
+  if (score >= 7.0) return 'ALTO'
+  if (score >= 4.0) return 'MEDIO'
+  return 'BAIXO'
 }
 
 /**

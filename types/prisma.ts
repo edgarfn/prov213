@@ -16,5 +16,9 @@ export type {
   TipoEvidencia,
   GravidadeIncidente,
   StatusIncidente,
+  CategoriaIncidente,
+  ClassificacaoRisco,
+  StatusVulnerabilidade,
+  OrigemVulnerabilidade,
   ConformidadeTeste,
 } from '@/app/generated/prisma/enums'

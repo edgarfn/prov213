@@ -232,7 +232,7 @@ export default function UsuariosPage() {
                       onValueChange={(v) => { if (v) handleChangePapel(m.user.id, v) }}
                     >
                       <SelectTrigger className="w-36 text-xs">
-                        <SelectValue />
+                        <SelectValue>{(v: string) => PAPEL_LABEL[v] ?? v}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {Object.entries(PAPEL_LABEL)
@@ -307,9 +307,13 @@ export default function UsuariosPage() {
                 onValueChange={(v) => { if (v) setForm(p => ({ ...p, serventiaId: v })) }}
               >
                 <SelectTrigger disabled={loadingServentias}>
-                  <SelectValue
-                    placeholder={loadingServentias ? 'Carregando…' : 'Selecione a serventia'}
-                  />
+                  <SelectValue>
+                    {(id: string) => {
+                      if (!id) return loadingServentias ? 'Carregando…' : 'Selecione a serventia'
+                      const s = serventias.find((x) => x.serventia.id === id)
+                      return s ? s.serventia.nome : 'Selecione a serventia'
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {serventias.map((s) => (
@@ -335,7 +339,7 @@ export default function UsuariosPage() {
                 value={form.papel}
                 onValueChange={(v) => { if (v) setForm(p => ({ ...p, papel: v })) }}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue>{(v: string) => PAPEL_LABEL[v] ?? v}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {Object.entries(PAPEL_LABEL)
                     .filter(([k]) => k !== 'TITULAR')

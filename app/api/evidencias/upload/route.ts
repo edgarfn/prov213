@@ -21,11 +21,14 @@ export async function POST(req: NextRequest) {
   const serventiaId = formData.get('serventiaId') as string
   const requisitoId = (formData.get('requisitoId') as string) || null
   const testeRestauracaoId = (formData.get('testeRestauracaoId') as string) || null
+  const incidenteId = (formData.get('incidenteId') as string) || null
+  const vulnerabilidadeId = (formData.get('vulnerabilidadeId') as string) || null
   const tipo = (formData.get('tipo') as string) || 'DOCUMENTO'
 
-  if (!file || !serventiaId || (!requisitoId && !testeRestauracaoId) || (requisitoId && testeRestauracaoId)) {
+  const origensInformadas = [requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId].filter(Boolean).length
+  if (!file || !serventiaId || origensInformadas !== 1) {
     return NextResponse.json(
-      { error: 'Informe o arquivo, a serventia e exatamente uma origem: requisitoId ou testeRestauracaoId' },
+      { error: 'Informe o arquivo, a serventia e exatamente uma origem: requisitoId, testeRestauracaoId, incidenteId ou vulnerabilidadeId' },
       { status: 400 },
     )
   }
@@ -42,9 +45,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  // Resolve a origem (requisito ou teste de restauração), validando que pertence à serventia
+  // Resolve a origem (requisito, teste de restauração, incidente ou vulnerabilidade), validando que pertence à serventia
   let origemId: string
-  let evidenciaData: { progressoRequisitoId?: string; testeRestauracaoId?: string }
+  let evidenciaData: {
+    progressoRequisitoId?: string
+    testeRestauracaoId?: string
+    incidenteId?: string
+    vulnerabilidadeId?: string
+  }
   if (requisitoId) {
     const progresso = await db.progressoRequisito.findUnique({
       where: { serventiaId_requisitoId: { serventiaId, requisitoId } },
@@ -54,15 +62,33 @@ export async function POST(req: NextRequest) {
     }
     origemId = progresso.id
     evidenciaData = { progressoRequisitoId: progresso.id }
-  } else {
+  } else if (testeRestauracaoId) {
     const teste = await db.testeRestauracao.findFirst({
-      where: { id: testeRestauracaoId!, serventiaId },
+      where: { id: testeRestauracaoId, serventiaId },
     })
     if (!teste) {
       return NextResponse.json({ error: 'Teste de restauração não encontrado para esta serventia' }, { status: 404 })
     }
     origemId = teste.id
     evidenciaData = { testeRestauracaoId: teste.id }
+  } else if (incidenteId) {
+    const incidente = await db.incidente.findFirst({
+      where: { id: incidenteId, serventiaId },
+    })
+    if (!incidente) {
+      return NextResponse.json({ error: 'Incidente não encontrado para esta serventia' }, { status: 404 })
+    }
+    origemId = incidente.id
+    evidenciaData = { incidenteId: incidente.id }
+  } else {
+    const vulnerabilidade = await db.vulnerabilidade.findFirst({
+      where: { id: vulnerabilidadeId!, serventiaId },
+    })
+    if (!vulnerabilidade) {
+      return NextResponse.json({ error: 'Vulnerabilidade não encontrada para esta serventia' }, { status: 404 })
+    }
+    origemId = vulnerabilidade.id
+    evidenciaData = { vulnerabilidadeId: vulnerabilidade.id }
   }
 
   // Calcular SHA-256
@@ -98,7 +124,7 @@ export async function POST(req: NextRequest) {
     acao: 'EVIDENCIA_UPLOAD',
     entidade: 'Evidencia',
     entidadeId: evidencia.id,
-    valorNovo: { nomeArquivo: file.name, hashSha256, tamanhoBytes: file.size, tipo, requisitoId, testeRestauracaoId },
+    valorNovo: { nomeArquivo: file.name, hashSha256, tamanhoBytes: file.size, tipo, requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId },
     ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip'),
     userAgent: req.headers.get('user-agent'),
   })

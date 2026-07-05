@@ -79,6 +79,21 @@ enum StatusIncidente {
   ENCERRADO
 }
 
+/// Taxonomia inspirada no NIST SP 800-61 / ISO 27035, adaptada aos termos do
+/// Provimento — usada para categorizar e permitir análise estatística dos
+/// incidentes registrados (nenhuma delas é normativa do Provimento em si).
+enum CategoriaIncidente {
+  ACESSO_NAO_AUTORIZADO
+  MALWARE_RANSOMWARE
+  VAZAMENTO_DADOS
+  INDISPONIBILIDADE_DOS
+  PHISHING_ENGENHARIA_SOCIAL
+  FALHA_CONFIGURACAO
+  PERDA_ROUBO_DISPOSITIVO
+  FISICO
+  OUTRO
+}
+
 enum ConformidadeTeste {
   INTEGRAL
   PARCIAL
@@ -151,12 +166,14 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  accounts       Account[]
-  sessions       Session[]
-  membros        MembroServentia[]
-  progressos     ProgressoRequisito[]
-  auditLogs      AuditLog[]
-  passwordResets PasswordResetToken[]
+  accounts                    Account[]
+  sessions                    Session[]
+  membros                     MembroServentia[]
+  progressos                  ProgressoRequisito[]
+  incidentesResponsavel       Incidente[]
+  vulnerabilidadesResponsavel Vulnerabilidade[]
+  auditLogs                   AuditLog[]
+  passwordResets              PasswordResetToken[]
 }
 
 // ─── Reset de senha ───────────────────────────────────────────────────────────
@@ -285,6 +302,8 @@ model Evidencia {
   id                   String              @id @default(cuid())
   progressoRequisitoId String?
   testeRestauracaoId   String?
+  incidenteId          String?
+  vulnerabilidadeId    String?
   nomeArquivo          String
   storagePath          String
   hashSha256           String
@@ -295,46 +314,100 @@ model Evidencia {
   deletedAt            DateTime?
   progressoRequisito   ProgressoRequisito? @relation(fields: [progressoRequisitoId], references: [id])
   testeRestauracao     TesteRestauracao?   @relation(fields: [testeRestauracaoId], references: [id])
+  incidente            Incidente?          @relation(fields: [incidenteId], references: [id])
+  vulnerabilidade      Vulnerabilidade?    @relation(fields: [vulnerabilidadeId], references: [id])
 
   @@index([testeRestauracaoId])
+  @@index([incidenteId])
+  @@index([vulnerabilidadeId])
 }
 
 // ─── Incidentes ───────────────────────────────────────────────────────────────
 
 model Incidente {
-  id                     String             @id @default(cuid())
-  serventiaId            String
-  titulo                 String
-  descricao              String             @db.Text
-  dataOcorrencia         DateTime
-  dataCiencia            DateTime
-  gravidade              GravidadeIncidente
-  status                 StatusIncidente    @default(ABERTO)
-  comunicadoCorregedoria Boolean            @default(false)
-  dataComunicacao        DateTime?
-  comunicadoAnpd         Boolean            @default(false)
-  causaRaiz              String?            @db.Text
-  medidasCorretivas      String?            @db.Text
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-  serventia              Serventia          @relation(fields: [serventiaId], references: [id])
+  id                          String             @id @default(cuid())
+  serventiaId                 String
+  titulo                      String
+  descricao                   String             @db.Text
+  categoria                   CategoriaIncidente @default(OUTRO)
+  dataOcorrencia              DateTime
+  dataCiencia                 DateTime
+  gravidade                   GravidadeIncidente
+  status                      StatusIncidente    @default(ABERTO)
+  responsavelId               String?
+  comunicadoCorregedoria      Boolean            @default(false)
+  dataComunicacao             DateTime?
+  comunicadoAnpd              Boolean            @default(false)
+  causaRaiz                   String?            @db.Text
+  medidasCorretivas           String?            @db.Text
+  /// Art. 48 da LGPD / Resolução CD/ANPD nº 15/2024 — informações mínimas
+  /// exigidas na comunicação de incidente com dados pessoais à ANPD.
+  dadosPessoaisEnvolvidos     Boolean            @default(false)
+  categoriasDadosAfetados     String?            @db.Text
+  quantidadeTitularesAfetados Int?
+  riscosTitulares             String?            @db.Text
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+  serventia                   Serventia          @relation(fields: [serventiaId], references: [id])
+  responsavel                 User?              @relation(fields: [responsavelId], references: [id])
+  evidencias                  Evidencia[]
 }
 
 // ─── Vulnerabilidades ─────────────────────────────────────────────────────────
 
+enum ClassificacaoRisco {
+  BAIXO
+  MEDIO
+  ALTO
+  CRITICO
+}
+
+/// Fluxo de tratamento inspirado em NIST SP 800-40 / ISO 27001 A.12.6.1
+/// (registro de vulnerabilidades técnicas). RISCO_ACEITO e FALSO_POSITIVO
+/// também encerram o prazo (ver dataEncerramento), mas exigem justificativa.
+enum StatusVulnerabilidade {
+  IDENTIFICADA
+  EM_CORRECAO
+  CORRIGIDA
+  RISCO_ACEITO
+  FALSO_POSITIVO
+}
+
+enum OrigemVulnerabilidade {
+  PENTESTE
+  SCANNER_AUTOMATIZADO
+  REPORTE_INTERNO
+  REPORTE_EXTERNO
+  AUDITORIA
+  FORNECEDOR_CVE
+  OUTRO
+}
+
 model Vulnerabilidade {
-  id                 String    @id @default(cuid())
-  serventiaId        String
-  descricao          String    @db.Text
-  dataIdentificacao  DateTime
-  classificacaoRisco String
-  exploracaoAtiva    Boolean   @default(false)
-  prazoLimite        DateTime
-  dataEncerramento   DateTime?
-  providencias       String?   @db.Text
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  serventia          Serventia @relation(fields: [serventiaId], references: [id])
+  id                       String                @id @default(cuid())
+  serventiaId              String
+  descricao                String                @db.Text
+  dataIdentificacao        DateTime
+  classificacaoRisco       ClassificacaoRisco
+  status                   StatusVulnerabilidade @default(IDENTIFICADA)
+  origem                   OrigemVulnerabilidade @default(OUTRO)
+  ativoAfetado             String?
+  /// Referência externa (ex.: CVE-2025-12345), quando aplicável
+  cveReferencia            String?
+  /// CVSS v3.1 (0.0–10.0) — usado só para sugerir a classificação de risco
+  cvssScore                Float?
+  responsavelId            String?
+  exploracaoAtiva          Boolean               @default(false)
+  prazoLimite              DateTime
+  dataEncerramento         DateTime?
+  providencias             String?               @db.Text
+  /// Exigida quando status = RISCO_ACEITO (aceite formal de risco)
+  justificativaRiscoAceito String?               @db.Text
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  serventia                Serventia             @relation(fields: [serventiaId], references: [id])
+  responsavel              User?                 @relation(fields: [responsavelId], references: [id])
+  evidencias               Evidencia[]
 }
 
 // ─── Testes de Restauração ────────────────────────────────────────────────────

@@ -8,12 +8,38 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 
+const CATEGORIAS = [
+  'ACESSO_NAO_AUTORIZADO', 'MALWARE_RANSOMWARE', 'VAZAMENTO_DADOS',
+  'INDISPONIBILIDADE_DOS', 'PHISHING_ENGENHARIA_SOCIAL', 'FALHA_CONFIGURACAO',
+  'PERDA_ROUBO_DISPOSITIVO', 'FISICO', 'OUTRO',
+] as const
+
+const optionalText = z.string().optional().transform((s) => (s?.trim() ? s.trim() : undefined))
+const optionalId = z.string().optional().transform((s) => (s?.trim() && s !== '_none' ? s.trim() : undefined))
+// "_none"/vazio vira null explícito (limpa a atribuição) — usado só na
+// atualização, onde o formulário sempre reenvia o valor atual do campo.
+const clearableId = z.string().optional().transform((s) => (s?.trim() && s !== '_none' ? s.trim() : null))
+// undefined quando o campo nem é enviado (atualização parcial não deve
+// resetar o valor já salvo) — só vira boolean quando explicitamente enviado.
+const boolFromString = z.string().optional().transform((s) => (s === undefined ? undefined : s === 'true'))
+const optionalInt = z.string().optional().transform((s) => {
+  if (!s?.trim()) return undefined
+  const n = Number(s)
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : undefined
+})
+
 const incidenteSchema = z.object({
   titulo: z.string().min(3),
   descricao: z.string().min(3),
+  categoria: z.enum(CATEGORIAS).optional().default('OUTRO'),
   dataOcorrencia: z.string().transform((s) => new Date(s)),
   dataCiencia: z.string().transform((s) => new Date(s)),
   gravidade: z.enum(['BAIXO', 'MEDIO', 'ALTO', 'CRITICO'] as const),
+  responsavelId: optionalId,
+  dadosPessoaisEnvolvidos: boolFromString,
+  categoriasDadosAfetados: optionalText,
+  quantidadeTitularesAfetados: optionalInt,
+  riscosTitulares: optionalText,
 })
 
 /**
@@ -28,6 +54,15 @@ async function garantirPodeEditar(userId: string, serventiaId: string) {
   return membro
 }
 
+/** Garante que o responsável atribuído é de fato membro ativo desta serventia. */
+async function validarResponsavel(responsavelId: string | null | undefined, serventiaId: string) {
+  if (!responsavelId) return true
+  const membro = await db.membroServentia.findUnique({
+    where: { userId_serventiaId: { userId: responsavelId, serventiaId } },
+  })
+  return !!membro?.ativo
+}
+
 export async function criarIncidente(serventiaId: string, formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
@@ -38,6 +73,10 @@ export async function criarIncidente(serventiaId: string, formData: FormData) {
   const raw = Object.fromEntries(formData.entries())
   const parsed = incidenteSchema.safeParse(raw)
   if (!parsed.success) return { error: 'Dados inválidos.' }
+
+  if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
+    return { error: 'Responsável selecionado não pertence a esta serventia.' }
+  }
 
   const incidente = await db.incidente.create({
     data: { serventiaId, ...parsed.data },
@@ -58,8 +97,14 @@ export async function criarIncidente(serventiaId: string, formData: FormData) {
 
 const atualizacaoSchema = z.object({
   status: z.enum(['ABERTO', 'EM_TRATAMENTO', 'ENCERRADO'] as const).optional(),
+  categoria: z.enum(CATEGORIAS).optional(),
   causaRaiz: z.string().optional(),
   medidasCorretivas: z.string().optional(),
+  responsavelId: clearableId,
+  dadosPessoaisEnvolvidos: boolFromString,
+  categoriasDadosAfetados: optionalText,
+  quantidadeTitularesAfetados: optionalInt,
+  riscosTitulares: optionalText,
 })
 
 export async function atualizarIncidente(serventiaId: string, incidenteId: string, formData: FormData) {
@@ -75,6 +120,10 @@ export async function atualizarIncidente(serventiaId: string, incidenteId: strin
 
   const anterior = await db.incidente.findFirst({ where: { id: incidenteId, serventiaId } })
   if (!anterior) return { error: 'Incidente não encontrado' }
+
+  if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
+    return { error: 'Responsável selecionado não pertence a esta serventia.' }
+  }
 
   // Art. 11, §2º: análise de causa raiz e medidas corretivas são exigidas
   // para o encerramento — não se permite fechar um incidente sem elas.

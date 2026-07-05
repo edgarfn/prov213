@@ -69,6 +69,7 @@ const ACOES_LABELS: Record<string, string> = {
   BACKUP_DOWNLOAD: 'Backup baixado',
   BACKUP_EXCLUIDO: 'Backup excluído',
   EXPORTACAO_AUDITORIA: 'Exportação de auditoria',
+  INCIDENTE_COMUNICADO_GERADO: 'Comunicado de incidente gerado',
 }
 
 const ACAO_COR: Record<string, string> = {
@@ -203,7 +204,9 @@ export function AuditoriaClient() {
               <Label className="text-xs">Tipo de ação</Label>
               <Select value={filtros.acao || '_todos'} onValueChange={(v) => { if (v) setFiltros(p => ({ ...p, acao: v === '_todos' ? '' : v })) }}>
                 <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Todas as ações" />
+                  <SelectValue>
+                    {(v: string) => (v === '_todos' ? 'Todas as ações' : (ACOES_LABELS[v] ?? v))}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_todos">Todas as ações</SelectItem>
