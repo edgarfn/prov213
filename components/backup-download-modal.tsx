@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Download, Loader2, Eye, EyeOff } from 'lucide-react'
 import type { BackupManifest } from '@/lib/backup'
+import { useIdleSuspend } from '@/components/idle-session-guard'
 
 interface BackupDownloadModalProps {
   backup: BackupManifest | null
@@ -20,6 +21,7 @@ interface BackupDownloadModalProps {
 }
 
 export function BackupDownloadModal({ backup, onClose }: BackupDownloadModalProps) {
+  const { withIdleSuspended } = useIdleSuspend()
   const [passphrase, setPassphrase] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -39,11 +41,14 @@ export function BackupDownloadModal({ backup, onClose }: BackupDownloadModalProp
     setLoading(true)
 
     try {
-      const res = await fetch(`/api/backup/${encodeURIComponent(backup.filename)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passphrase: backup.encrypted ? passphrase : undefined }),
-      })
+      // Descriptografar + transferir um ZIP grande pode demorar.
+      const res = await withIdleSuspended(() =>
+        fetch(`/api/backup/${encodeURIComponent(backup.filename)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passphrase: backup.encrypted ? passphrase : undefined }),
+        }),
+      )
 
       if (!res.ok) {
         const json = await res.json()

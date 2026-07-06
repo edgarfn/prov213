@@ -20,5 +20,7 @@ declare module 'next-auth/jwt' {
     id?: string
     mfaEnabled?: boolean
     mfaVerified?: boolean
+    /** Epoch ms da última atividade real do usuário — bloqueio por inatividade (ver proxy.ts) */
+    lastActivityAt?: number
   }
 }

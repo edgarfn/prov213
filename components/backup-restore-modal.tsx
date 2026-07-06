@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { RotateCcw, Loader2, AlertTriangle, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import type { BackupManifest } from '@/lib/backup'
+import { useIdleSuspend } from '@/components/idle-session-guard'
 
 const CONFIRM_WORD = 'RESTAURAR'
 
@@ -27,6 +28,7 @@ interface RestoreSummary {
 }
 
 export function BackupRestoreModal({ backup, onClose }: BackupRestoreModalProps) {
+  const { withIdleSuspended } = useIdleSuspend()
   const [passphrase, setPassphrase] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [confirmText, setConfirmText] = useState('')
@@ -51,14 +53,18 @@ export function BackupRestoreModal({ backup, onClose }: BackupRestoreModalProps)
     setLoading(true)
 
     try {
-      const res = await fetch(`/api/backup/${encodeURIComponent(backup.filename)}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          passphrase: backup.encrypted ? passphrase : undefined,
-          confirm: true,
+      // Restauração roda uma transação com todas as tabelas da serventia —
+      // pode levar minutos em bancos maiores; não deve ser interrompida.
+      const res = await withIdleSuspended(() =>
+        fetch(`/api/backup/${encodeURIComponent(backup.filename)}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            passphrase: backup.encrypted ? passphrase : undefined,
+            confirm: true,
+          }),
         }),
-      })
+      )
 
       const json = await res.json()
 

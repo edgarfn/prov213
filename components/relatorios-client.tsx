@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FileText, FileSignature, Archive, Loader2 } from 'lucide-react'
+import { useIdleSuspend } from '@/components/idle-session-guard'
 
 interface EtapaOption {
   id: string
@@ -23,11 +24,14 @@ async function baixarArquivo(
   nomeArquivo: string,
   setLoading: (v: boolean) => void,
   setErro: (v: string | null) => void,
+  withIdleSuspended: <T>(fn: () => Promise<T>) => Promise<T>,
 ) {
   setLoading(true)
   setErro(null)
   try {
-    const res = await fetch(url)
+    // Geração do PDF/ZIP (em especial o pacote probatório completo) pode
+    // levar bastante tempo — não deve ser cortada por inatividade.
+    const res = await withIdleSuspended(() => fetch(url))
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       setErro(err.error ?? 'Erro ao gerar o documento.')
@@ -50,6 +54,7 @@ async function baixarArquivo(
 }
 
 export function RelatoriosClient({ classe, etapas }: Props) {
+  const { withIdleSuspended } = useIdleSuspend()
   const [etapaSelecionada, setEtapaSelecionada] = useState(etapas[0]?.id ?? '')
   const [loadingStatus, setLoadingStatus] = useState(false)
   const [loadingSimplificado, setLoadingSimplificado] = useState(false)
@@ -92,6 +97,7 @@ export function RelatoriosClient({ classe, etapas }: Props) {
                   'status-conformidade.pdf',
                   setLoadingStatus,
                   setErro,
+                  withIdleSuspended,
                 )
               }
               disabled={loadingStatus}
@@ -143,6 +149,7 @@ export function RelatoriosClient({ classe, etapas }: Props) {
                     'relatorio-simplificado.pdf',
                     setLoadingSimplificado,
                     setErro,
+                    withIdleSuspended,
                   )
                 }
                 disabled={loadingSimplificado || !etapaSelecionada}
@@ -177,6 +184,7 @@ export function RelatoriosClient({ classe, etapas }: Props) {
                   'pacote-probatorio.zip',
                   setLoadingPacote,
                   setErro,
+                  withIdleSuspended,
                 )
               }
               disabled={loadingPacote}

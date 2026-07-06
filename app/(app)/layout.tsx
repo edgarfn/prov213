@@ -10,19 +10,22 @@ import { db } from '@/lib/db'
 import { getAlertasServentia } from '@/lib/alertas'
 import { SidebarNav } from '@/components/sidebar-nav'
 import { TopBar } from '@/components/top-bar'
+import { IdleSessionGuard } from '@/components/idle-session-guard'
 import type { ServentiaInfo } from '@/components/serventia-switcher'
 
 import type { Session } from 'next-auth'
 
 function SetupLayout({ children, user }: { children: React.ReactNode; user: Session['user'] }) {
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <SidebarNav papel={undefined} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar user={user} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    <IdleSessionGuard>
+      <div className="flex h-screen overflow-hidden bg-slate-50">
+        <SidebarNav papel={undefined} />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TopBar user={user} />
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </IdleSessionGuard>
   )
 }
 
@@ -81,20 +84,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     : { totalCriticos: 0, totalAtencao: 0 }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <SidebarNav
-        papel={membro.papel}
-        totalCriticos={resumoAlertas.totalCriticos}
-        totalAtencao={resumoAlertas.totalAtencao}
-      />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar
-          user={session.user}
-          serventiaAtual={serventiaAtual}
-          todasServentias={todasServentias}
+    <IdleSessionGuard>
+      <div className="flex h-screen overflow-hidden bg-slate-50">
+        <SidebarNav
+          papel={membro.papel}
+          totalCriticos={resumoAlertas.totalCriticos}
+          totalAtencao={resumoAlertas.totalAtencao}
         />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TopBar
+            user={session.user}
+            serventiaAtual={serventiaAtual}
+            todasServentias={todasServentias}
+          />
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </IdleSessionGuard>
   )
 }

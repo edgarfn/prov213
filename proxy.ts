@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { SERVENTIA_COOKIE } from '@/lib/constants'
+import { getToken } from 'next-auth/jwt'
+import { SERVENTIA_COOKIE, IDLE_TIMEOUT_MS } from '@/lib/constants'
 import { absoluteUrl } from '@/lib/utils'
+
+const SESSION_COOKIE_NAMES = ['next-auth.session-token', '__Secure-next-auth.session-token']
+
+/** Apaga o cookie de sessão na resposta — usado quando a sessão é considerada
+ * expirada por inatividade, para que o navegador não a reenvie em seguida. */
+function clearSessionCookies(response: NextResponse) {
+  for (const name of SESSION_COOKIE_NAMES) {
+    response.cookies.set(name, '', { maxAge: 0, path: '/' })
+  }
+  return response
+}
 
 // Rotas que exigem apenas autenticação (sem exigir cookie de serventia)
 const AUTH_ONLY = [
@@ -57,7 +69,7 @@ function nextWithRequestId(request: NextRequest, requestId: string) {
   return withRequestId(NextResponse.next({ request: { headers: forwardedHeaders } }), requestId)
 }
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const requestId = request.headers.get(REQUEST_ID_HEADER) ?? crypto.randomUUID()
 
@@ -73,6 +85,41 @@ export function proxy(request: NextRequest) {
       loginUrl.searchParams.set('callbackUrl', pathname)
     }
     return withRequestId(NextResponse.redirect(loginUrl), requestId)
+  }
+
+  // 1.1 Bloqueio de sessão por inatividade (Anexo II — "sessão com expiração").
+  // O cookie por si só só prova que houve login algum dia; o JWT decodificado
+  // carrega lastActivityAt, renovado por heartbeat client-side a cada
+  // atividade real (mouse/teclado) — ver components/idle-session-guard.tsx e
+  // lib/auth.ts. Um token que falha ao decodificar (adulterado/corrompido) é
+  // tratado da mesma forma que inatividade: falha fechado, nunca "passa por
+  // via das dúvidas". Isto é reforço server-side — não pode ser contornado
+  // apenas desabilitando o JavaScript do cliente.
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+    secureCookie: process.env.NEXTAUTH_URL?.startsWith('https://') ?? false,
+  }).catch(() => null)
+
+  const lastActivityAt = typeof token?.lastActivityAt === 'number' ? token.lastActivityAt : null
+  const idleExpired = !token || lastActivityAt === null || Date.now() - lastActivityAt > IDLE_TIMEOUT_MS
+
+  if (idleExpired) {
+    if (pathname.startsWith('/api/')) {
+      return clearSessionCookies(
+        withRequestId(
+          NextResponse.json(
+            { error: 'Sessão expirada por inatividade', code: 'SESSION_IDLE_TIMEOUT' },
+            { status: 401 },
+          ),
+          requestId,
+        ),
+      )
+    }
+    const loginUrl = absoluteUrl('/login')
+    loginUrl.searchParams.set('callbackUrl', pathname)
+    loginUrl.searchParams.set('motivo', 'inatividade')
+    return clearSessionCookies(withRequestId(NextResponse.redirect(loginUrl), requestId))
   }
 
   // 2. Rotas auth-only não precisam de serventia

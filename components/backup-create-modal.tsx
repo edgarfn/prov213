@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { ShieldCheck, ShieldOff, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import type { BackupManifest } from '@/lib/backup'
+import { useIdleSuspend } from '@/components/idle-session-guard'
 
 interface BackupCreateModalProps {
   open: boolean
@@ -21,6 +22,7 @@ interface BackupCreateModalProps {
 }
 
 export function BackupCreateModal({ open, onClose, onCreated }: BackupCreateModalProps) {
+  const { withIdleSuspended } = useIdleSuspend()
   const [encrypt, setEncrypt] = useState(true)
   const [passphrase, setPassphrase] = useState('')
   const [passphraseConfirm, setPassphraseConfirm] = useState('')
@@ -46,11 +48,16 @@ export function BackupCreateModal({ open, onClose, onCreated }: BackupCreateModa
     setLoading(true)
 
     try {
-      const res = await fetch('/api/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ encrypt, passphrase: encrypt ? passphrase : undefined }),
-      })
+      // Coletar+zipar+criptografar todos os dados da serventia pode levar
+      // bem mais que alguns segundos — não deve ser interrompido pelo
+      // bloqueio por inatividade só porque o usuário está esperando parado.
+      const res = await withIdleSuspended(() =>
+        fetch('/api/backup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ encrypt, passphrase: encrypt ? passphrase : undefined }),
+        }),
+      )
 
       const json = await res.json()
 

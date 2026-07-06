@@ -32,6 +32,7 @@ function LoginContent({ allowRegistration }: { allowRegistration: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
   const callbackUrl = params.get('callbackUrl') || '/dashboard'
+  const bloqueadaPorInatividade = params.get('motivo') === 'inatividade'
 
   const [step, setStep] = useState<LoginStep>('credentials')
   const [loading, setLoading] = useState(false)
@@ -144,6 +145,15 @@ function LoginContent({ allowRegistration }: { allowRegistration: boolean }) {
           <ShieldCheck className="h-4 w-4" />
           <AlertDescription>
             Primeiro acesso ao sistema: crie a conta de administrador para começar.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {bloqueadaPorInatividade && step === 'credentials' && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-800">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertDescription>
+            Sua sessão foi encerrada por inatividade. Entre novamente para continuar.
           </AlertDescription>
         </Alert>
       )}

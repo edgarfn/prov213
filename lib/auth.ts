@@ -71,11 +71,19 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id
         token.mfaEnabled = (user as { mfaEnabled?: boolean }).mfaEnabled ?? false
         token.mfaVerified = (user as { mfaVerified?: boolean }).mfaVerified ?? false
+        token.lastActivityAt = Date.now()
+      }
+      // Heartbeat de atividade: components/idle-session-guard.tsx chama
+      // session.update() a cada atividade real do usuário (throttled), o que
+      // dispara este callback com trigger "update" — proxy.ts usa esse
+      // timestamp para bloquear a sessão por inatividade (Anexo II).
+      if (trigger === 'update') {
+        token.lastActivityAt = Date.now()
       }
       return token
     },
