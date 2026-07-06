@@ -16,7 +16,7 @@ import { InfoTooltip } from '@/components/info-tooltip'
 import type { Ativo, RolePapel } from '@/types/prisma'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Server, Plus, Clock, History, UserCircle, Filter, Bug, AlertTriangle } from 'lucide-react'
+import { Server, Plus, Clock, History, UserCircle, Filter, Bug, AlertTriangle, FileDown } from 'lucide-react'
 
 const TIPO_LABEL: Record<string, string> = {
   EQUIPAMENTO: 'Equipamento',
@@ -265,11 +265,18 @@ export function AtivosClient({ serventiaId, ativos, usuarios, papelAtual }: Prop
             <InfoTooltip chave="TIPO_ATIVO" />
           </p>
         </div>
-        {!somenteLeitura && (
-          <Button size="sm" onClick={() => { setForm(FORM_INITIAL); setError(null); setCreateOpen(true) }}>
-            <Plus className="h-4 w-4 mr-2" /> Cadastrar ativo
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <a href="/api/ativos/exportar-pdf" target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline">
+              <FileDown className="h-4 w-4 mr-2" /> Exportar PDF (Requisito 1.7)
+            </Button>
+          </a>
+          {!somenteLeitura && (
+            <Button size="sm" onClick={() => { setForm(FORM_INITIAL); setError(null); setCreateOpen(true) }}>
+              <Plus className="h-4 w-4 mr-2" /> Cadastrar ativo
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* KPIs */}
