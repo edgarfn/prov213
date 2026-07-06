@@ -17,6 +17,7 @@ import {
   Users,
   ScrollText,
   FileBarChart,
+  Server,
 } from 'lucide-react'
 
 interface NavItem {
@@ -30,6 +31,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/checklists', label: 'Checklists', icon: ClipboardList },
+  { href: '/ativos', label: 'Ativos', icon: Server },
   { href: '/evidencias', label: 'Evidências', icon: FolderOpen },
   { href: '/incidentes', label: 'Incidentes', icon: ShieldAlert },
   { href: '/vulnerabilidades', label: 'Vulnerabilidades', icon: Bug },

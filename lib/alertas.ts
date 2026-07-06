@@ -26,6 +26,7 @@ export type AlertaTipo =
   | 'VULNERABILIDADE_PRAZO'
   | 'TESTE_RESTAURACAO_ATRASADO'
   | 'PRORROGACAO_PROXIMA_LIMITE'
+  | 'ATIVO_FIM_VIDA_UTIL'
 
 export interface Alerta {
   id: string
@@ -62,6 +63,8 @@ export interface MontarAlertasInput {
   testeRestauracaoMeses: number
   /** Existe uma solicitação de prorrogação (Art. 21) aguardando decisão da Corregedoria */
   prorrogacaoPendente: boolean
+  /** Ativos em uso (não baixados) com fim de vida útil/suporte definido */
+  ativosComFimVidaUtil: Array<{ id: string; nome: string; dataFimVidaUtil: Date }>
 }
 
 /** Função pura de composição — sem acesso a banco, 100% testável. */
@@ -75,6 +78,7 @@ export function montarAlertas(input: MontarAlertasInput): Alerta[] {
     ultimoTesteData,
     testeRestauracaoMeses,
     prorrogacaoPendente,
+    ativosComFimVidaUtil,
   } = input
   const alertas: Alerta[] = []
 
@@ -155,6 +159,23 @@ export function montarAlertas(input: MontarAlertasInput): Alerta[] {
     })
   }
 
+  for (const ativo of ativosComFimVidaUtil) {
+    const severidade = calcularSemaforo(ativo.dataFimVidaUtil, hoje)
+    if (severidade === 'verde') continue
+    alertas.push({
+      id: `ATIVO_FIM_VIDA_UTIL:${ativo.id}`,
+      tipo: 'ATIVO_FIM_VIDA_UTIL',
+      severidade,
+      titulo: ativo.nome,
+      descricao:
+        severidade === 'vermelho'
+          ? 'Fim de vida útil/suporte já vencido — risco de segurança.'
+          : `Fim de vida útil/suporte em ${ativo.dataFimVidaUtil.toLocaleDateString('pt-BR')}.`,
+      prazo: ativo.dataFimVidaUtil,
+      href: '/ativos',
+    })
+  }
+
   const proximoTeste = proximoTesteRestauracaoDevido(ultimoTesteData, testeRestauracaoMeses)
   if (testeRestauracaoAtrasado(proximoTeste, hoje)) {
     alertas.push({
@@ -203,7 +224,7 @@ export async function getAlertasServentia(
     select: { classe: true, dataVigenciaNorma: true },
   })
 
-  const [incidentesCriticosAbertos, vulnerabilidadesAbertas, ultimoTeste, prorrogacaoNovaData, prorrogacaoPendente] =
+  const [incidentesCriticosAbertos, vulnerabilidadesAbertas, ultimoTeste, prorrogacaoNovaData, prorrogacaoPendente, ativosComFimVidaUtilRaw] =
     await Promise.all([
       db.incidente.findMany({
         where: { serventiaId, gravidade: 'CRITICO', status: { not: 'ENCERRADO' } },
@@ -220,7 +241,17 @@ export async function getAlertasServentia(
       }),
       getProrrogacaoAtivaData(serventiaId),
       db.prorrogacao.findFirst({ where: { serventiaId, status: 'SOLICITADA' }, select: { id: true } }),
+      db.ativo.findMany({
+        where: { serventiaId, status: { not: 'BAIXADO' }, dataFimVidaUtil: { not: null } },
+        select: { id: true, nome: true, dataFimVidaUtil: true },
+      }),
     ])
+
+  const ativosComFimVidaUtil = ativosComFimVidaUtilRaw.map((a) => ({
+    id: a.id,
+    nome: a.nome,
+    dataFimVidaUtil: a.dataFimVidaUtil as Date,
+  }))
 
   const prazos = calcularPrazos(serventia.dataVigenciaNorma, serventia.classe, !!prorrogacaoNovaData, prorrogacaoNovaData)
   const params = parametrosPorClasse(serventia.classe)
@@ -235,6 +266,7 @@ export async function getAlertasServentia(
     ultimoTesteData: ultimoTeste?.dataTeste ?? null,
     testeRestauracaoMeses: params.testeRestauracaoMeses,
     prorrogacaoPendente: !!prorrogacaoPendente,
+    ativosComFimVidaUtil,
   })
 
   return resumirAlertas(alertas)

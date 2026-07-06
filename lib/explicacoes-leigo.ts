@@ -60,6 +60,28 @@ export const EXPLICACOES_LEIGO = {
     '"Risco aceito" significa que a serventia decidiu, formalmente e por escrito, conviver com essa falha ' +
     'em vez de corrigi-la agora (ex.: custo desproporcional, mitigação já suficiente por outro controle). ' +
     'Diferente de simplesmente ignorar o problema — exige justificativa registrada e é auditável.',
+  TIPO_ATIVO:
+    'Categoria do ativo tecnológico, conforme o item 1.7 do Anexo IV: equipamento (computador, servidor, ' +
+    'nobreak...), sistema/software, banco de dados, integração entre sistemas, certificado digital ou ' +
+    'contrato com fornecedor.',
+  CRITICIDADE_ATIVO:
+    'O quanto o cartório seria afetado se este ativo parasse de funcionar ou fosse comprometido. Um ' +
+    'servidor que guarda o acervo é "crítico"; uma impressora de rascunho é "baixa".',
+  STATUS_CICLO_VIDA_ATIVO:
+    'Em que fase do ciclo de vida o ativo está: em aquisição (ainda sendo comprado/contratado), ativo (em ' +
+    'uso normal), em manutenção, descontinuado (não é mais a solução principal, mas ainda em uso) ou ' +
+    'baixado (definitivamente fora de uso).',
+  FIM_VIDA_UTIL_ATIVO:
+    'Data em que o ativo deixa de ter suporte do fabricante, o certificado expira, ou a vida útil termina — ' +
+    'o que for aplicável a este tipo de ativo. Equipamento ou software sem suporte é um risco de segurança ' +
+    'conhecido, por isso o sistema avisa quando essa data se aproxima ou já passou.',
+  DADOS_PESSOAIS_ATIVO:
+    'Marque "sim" se este ativo armazena ou processa dados de pessoas (CPF, nome, endereço, dados de ' +
+    'clientes etc.) — ajuda a manter o registro de operações de tratamento exigido pela LGPD (Art. 6º, IV).',
+  BAIXA_ATIVO:
+    '"Dar baixa" é encerrar definitivamente o uso do ativo (descarte de equipamento, fim de contrato, ' +
+    'desinstalação de software). Diferente de "descontinuado", que ainda pode estar em uso residual — a ' +
+    'baixa exige uma justificativa registrada, da mesma forma que o encerramento de um incidente.',
 } as const
 
 export type ExplicacaoLeigoChave = keyof typeof EXPLICACOES_LEIGO

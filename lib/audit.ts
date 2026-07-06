@@ -64,6 +64,10 @@ export type AcaoAuditoria =
   | 'VULNERABILIDADE_CRIADA'
   | 'VULNERABILIDADE_ATUALIZADA'
   | 'VULNERABILIDADE_ENCERRADA'
+  // Cadastro de Ativos (Anexo I; Anexo IV, Etapa 1, item 1.7)
+  | 'ATIVO_CRIADO'
+  | 'ATIVO_ATUALIZADO'
+  | 'ATIVO_BAIXADO'
   // Testes de restauração (Anexo V)
   | 'TESTE_RESTAURACAO_CRIADO'
   | 'TESTE_RESTAURACAO_ATA_GERADA'

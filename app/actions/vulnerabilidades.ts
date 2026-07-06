@@ -32,6 +32,7 @@ const vulnerabilidadeSchema = z.object({
   dataIdentificacao: z.string().transform((s) => new Date(s)),
   classificacaoRisco: z.enum(CLASSIFICACOES),
   origem: z.enum(ORIGENS).optional().default('OUTRO'),
+  ativoId: optionalId,
   ativoAfetado: optionalText,
   cveReferencia: optionalText,
   cvssScore: optionalCvss,
@@ -59,6 +60,13 @@ async function validarResponsavel(responsavelId: string | null | undefined, serv
   return !!membro?.ativo
 }
 
+/** Garante que o ativo vinculado pertence de fato a esta serventia (isolamento multi-tenant). */
+async function validarAtivo(ativoId: string | null | undefined, serventiaId: string) {
+  if (!ativoId) return true
+  const ativo = await db.ativo.findFirst({ where: { id: ativoId, serventiaId } })
+  return !!ativo
+}
+
 /**
  * Art. 11, §3º; Anexo II, item 5, II: crítica sem exploração ativa = 30 dias;
  * exploração ativa/risco iminente = 72h. O prazo é recalculado sempre que
@@ -79,6 +87,9 @@ export async function criarVulnerabilidade(serventiaId: string, formData: FormDa
 
   if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
     return { error: 'Responsável selecionado não pertence a esta serventia.' }
+  }
+  if (!(await validarAtivo(parsed.data.ativoId, serventiaId))) {
+    return { error: 'Ativo selecionado não pertence a esta serventia.' }
   }
 
   const prazoLimite = prazoVulnerabilidade(parsed.data.dataIdentificacao, parsed.data.exploracaoAtiva)
@@ -109,6 +120,7 @@ const atualizacaoSchema = z.object({
   status: z.enum(['IDENTIFICADA', 'EM_CORRECAO', 'CORRIGIDA', 'RISCO_ACEITO', 'FALSO_POSITIVO'] as const).optional(),
   classificacaoRisco: z.enum(CLASSIFICACOES).optional(),
   origem: z.enum(ORIGENS).optional(),
+  ativoId: clearableId,
   ativoAfetado: optionalText,
   cveReferencia: optionalText,
   cvssScore: optionalCvss,
@@ -135,6 +147,9 @@ export async function atualizarVulnerabilidade(serventiaId: string, vulnerabilid
 
   if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
     return { error: 'Responsável selecionado não pertence a esta serventia.' }
+  }
+  if (!(await validarAtivo(parsed.data.ativoId, serventiaId))) {
+    return { error: 'Ativo selecionado não pertence a esta serventia.' }
   }
 
   const novoStatus = parsed.data.status ?? anterior.status
@@ -164,6 +179,7 @@ export async function atualizarVulnerabilidade(serventiaId: string, vulnerabilid
         status: novoStatus,
         classificacaoRisco: parsed.data.classificacaoRisco ?? anterior.classificacaoRisco,
         origem: parsed.data.origem ?? anterior.origem,
+        ativoId: parsed.data.ativoId !== undefined ? parsed.data.ativoId : anterior.ativoId,
         ativoAfetado: parsed.data.ativoAfetado ?? anterior.ativoAfetado,
         cveReferencia: parsed.data.cveReferencia ?? anterior.cveReferencia,
         cvssScore: parsed.data.cvssScore ?? anterior.cvssScore,

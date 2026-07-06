@@ -3,10 +3,9 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { getValidatedMembro } from '@/lib/serventia-context'
-import { parametrosPorClasse } from '@/lib/business-rules'
-import { VulnerabilidadesClient } from '@/components/vulnerabilidades-client'
+import { AtivosClient } from '@/components/ativos-client'
 
-export default async function VulnerabilidadesPage() {
+export default async function AtivosPage() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) redirect('/login')
 
@@ -14,35 +13,29 @@ export default async function VulnerabilidadesPage() {
   if (!membro) redirect('/selecionar-serventia')
   if (!membro.serventia.onboardingConcluido) redirect('/onboarding')
 
-  const [vulnerabilidades, usuarios, ativos] = await Promise.all([
-    db.vulnerabilidade.findMany({
+  const [ativos, usuarios] = await Promise.all([
+    db.ativo.findMany({
       where: { serventiaId: membro.serventiaId },
-      orderBy: { dataIdentificacao: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         responsavel: { select: { name: true, email: true } },
-        ativo: { select: { nome: true } },
-        evidencias: { where: { deletedAt: null } },
+        vulnerabilidades: {
+          select: { id: true, descricao: true, status: true, classificacaoRisco: true },
+        },
       },
     }),
     db.user.findMany({
       where: { membros: { some: { serventiaId: membro.serventiaId } } },
       select: { id: true, name: true, email: true },
     }),
-    db.ativo.findMany({
-      where: { serventiaId: membro.serventiaId },
-      orderBy: { nome: 'asc' },
-      select: { id: true, nome: true, status: true },
-    }),
   ])
 
   return (
-    <VulnerabilidadesClient
+    <AtivosClient
       serventiaId={membro.serventiaId}
-      vulnerabilidades={vulnerabilidades}
-      usuarios={usuarios}
       ativos={ativos}
+      usuarios={usuarios}
       papelAtual={membro.papel}
-      retencaoAnos={parametrosPorClasse(membro.serventia.classe).retencaoAnos}
     />
   )
 }

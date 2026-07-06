@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import type { Requisito, ProgressoRequisito, ClasseServentia } from '@/types/prisma'
 import { differenceInDays, format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CheckCircle2, Clock, AlertTriangle, TrendingUp, CalendarDays, Plus, ShieldAlert, Bug, HardDriveDownload, CalendarClock, FileClock } from 'lucide-react'
+import { CheckCircle2, Clock, AlertTriangle, TrendingUp, CalendarDays, Plus, ShieldAlert, Bug, HardDriveDownload, CalendarClock, FileClock, Server } from 'lucide-react'
 
 const ALERTA_ICONE: Record<AlertaTipo, React.ElementType> = {
   ETAPA_PRAZO: CalendarClock,
@@ -25,6 +25,7 @@ const ALERTA_ICONE: Record<AlertaTipo, React.ElementType> = {
   VULNERABILIDADE_PRAZO: Bug,
   TESTE_RESTAURACAO_ATRASADO: HardDriveDownload,
   PRORROGACAO_PROXIMA_LIMITE: FileClock,
+  ATIVO_FIM_VIDA_UTIL: Server,
 }
 
 const ALERTA_COR: Record<Alerta['severidade'], string> = {
