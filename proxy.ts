@@ -3,6 +3,13 @@ import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { SERVENTIA_COOKIE, IDLE_TIMEOUT_MS } from '@/lib/constants'
 import { absoluteUrl } from '@/lib/utils'
+import {
+  checkRateLimit,
+  getClientIp,
+  RATE_LIMIT_RULES,
+  tooManyRequestsResponse,
+  type RateLimitRule,
+} from '@/lib/rate-limit'
 
 const SESSION_COOKIE_NAMES = ['next-auth.session-token', '__Secure-next-auth.session-token']
 
@@ -69,9 +76,54 @@ function nextWithRequestId(request: NextRequest, requestId: string) {
   return withRequestId(NextResponse.next({ request: { headers: forwardedHeaders } }), requestId)
 }
 
+// Rotas de autenticação sensíveis a força bruta / credential stuffing —
+// cada uma tem seu próprio bucket em lib/rate-limit.ts (RATE_LIMIT_RULES),
+// então esgotar a cota de uma não afeta as demais. Só POSTs contam: GETs
+// nessas rotas apenas renderizam a página/formulário.
+function matchSensitiveAuthRule(request: NextRequest): RateLimitRule | null {
+  if (request.method !== 'POST') return null
+
+  switch (request.nextUrl.pathname) {
+    // Submissão de credenciais do NextAuth (login e verificação de MFA).
+    case '/api/auth/callback/credentials':
+      return RATE_LIMIT_RULES.authLogin
+    // Auto-cadastro do primeiro administrador (Server Action — POST na própria página).
+    case '/registro':
+      return RATE_LIMIT_RULES.authRegister
+    case '/api/auth/forgot-password':
+      return RATE_LIMIT_RULES.authForgotPassword
+    case '/api/auth/reset-password':
+      return RATE_LIMIT_RULES.authResetPassword
+    default:
+      return null
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const requestId = request.headers.get(REQUEST_ID_HEADER) ?? crypto.randomUUID()
+  const ip = getClientIp(request)
+
+  // 0. Rate limiting — roda antes de qualquer outra checagem para que uma
+  // inundação de requisições não gaste trabalho de autenticação/DB à toa.
+  const globalRateLimit = await checkRateLimit(ip, RATE_LIMIT_RULES.global)
+  if (!globalRateLimit.allowed) {
+    return withRequestId(tooManyRequestsResponse(globalRateLimit), requestId)
+  }
+
+  const sensitiveRule = matchSensitiveAuthRule(request)
+  if (sensitiveRule) {
+    const sensitiveRateLimit = await checkRateLimit(ip, sensitiveRule)
+    if (!sensitiveRateLimit.allowed) {
+      return withRequestId(
+        tooManyRequestsResponse(
+          sensitiveRateLimit,
+          'Muitas tentativas. Por segurança, aguarde antes de tentar novamente.',
+        ),
+        requestId,
+      )
+    }
+  }
 
   const isAuthOnly = AUTH_ONLY.some((p) => pathname.startsWith(p))
   const isProtected = PROTECTED.some((p) => pathname.startsWith(p))

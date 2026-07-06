@@ -44,6 +44,11 @@ services:
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "${NEXT_PUBLIC_TURNSTILE_SITE_KEY:?defina NEXT_PUBLIC_TURNSTILE_SITE_KEY no .env}"
       TURNSTILE_SECRET_KEY: "${TURNSTILE_SECRET_KEY:?defina TURNSTILE_SECRET_KEY no .env}"
       UPLOAD_DIR: /app/uploads
+      # Opcional — vazio por padrão, o que faz lib/rate-limit.ts usar o
+      # fallback em memória (ok para uma única réplica do `app`). Só defina
+      # no .env se subir o serviço `redis` abaixo (necessário com mais de
+      # uma réplica atrás de um load balancer).
+      REDIS_URL: "${REDIS_URL:-}"
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -52,9 +57,31 @@ services:
     networks:
       - prov213-net
       - proxy
+
+  # Opcional — só necessário para rate limiting distribuído (mais de uma
+  # réplica do `app` atrás de um load balancer). Uma instância única já é
+  # protegida pelo fallback em memória de lib/rate-limit.ts, sem precisar
+  # deste serviço. Para ativar: defina REDIS_URL="redis://redis:6379" no
+  # .env e suba com `docker compose --profile redis up -d`.
+  redis:
+    image: redis:7-alpine
+    container_name: prov213-redis
+    restart: unless-stopped
+    profiles: ["redis"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prov213-net
+
 volumes:
   postgres_data:
   uploads_data:
+  redis_data:
 
 networks:
   prov213-net:
