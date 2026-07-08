@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { setupMFA, verifyAndEnableMFA } from '@/app/actions/auth'
-import { ShieldCheck, ShieldOff, Loader2, QrCode } from 'lucide-react'
+import { ShieldCheck, ShieldOff, Loader2 } from 'lucide-react'
 
 interface MFASetupCardProps {
   mfaEnabled: boolean
@@ -17,7 +17,7 @@ interface MFASetupCardProps {
 
 export function MFASetupCard({ mfaEnabled, mfaVerified }: MFASetupCardProps) {
   const [fase, setFase] = useState<'idle' | 'setup' | 'verify'>('idle')
-  const [qrData, setQrData] = useState<{ secret: string; otpauthUrl: string } | null>(null)
+  const [qrData, setQrData] = useState<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null)
   const [ativado, setAtivado] = useState(mfaEnabled && mfaVerified)
@@ -29,7 +29,7 @@ export function MFASetupCard({ mfaEnabled, mfaVerified }: MFASetupCardProps) {
     if (result.error) {
       setMensagem({ tipo: 'erro', texto: result.error })
     } else {
-      setQrData(result as { secret: string; otpauthUrl: string })
+      setQrData(result as { secret: string; otpauthUrl: string; qrCodeDataUrl: string })
       setFase('verify')
     }
   }
@@ -95,15 +95,18 @@ export function MFASetupCard({ mfaEnabled, mfaVerified }: MFASetupCardProps) {
               </p>
               <div className="flex items-center justify-center">
                 <div className="border rounded-lg p-4 bg-white">
-                  <QrCode className="h-32 w-32 text-slate-400" />
-                  <p className="text-xs text-center mt-2 text-muted-foreground">QR Code (use a URL abaixo)</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- data: URL gerada sob demanda no servidor, não é asset otimizável pelo next/image */}
+                  <img
+                    src={qrData.qrCodeDataUrl}
+                    alt="QR Code para configurar o app autenticador"
+                    className="h-40 w-40"
+                    width={160}
+                    height={160}
+                  />
                 </div>
               </div>
-              <div className="rounded border bg-white p-2">
-                <p className="text-xs font-mono break-all text-slate-600">{qrData.otpauthUrl}</p>
-              </div>
               <p className="text-xs text-muted-foreground">
-                Ou insira esta chave manualmente: <code className="font-mono">{qrData.secret}</code>
+                Não conseguiu escanear? Insira esta chave manualmente no app: <code className="font-mono">{qrData.secret}</code>
               </p>
             </div>
 

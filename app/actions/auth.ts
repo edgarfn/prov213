@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { generateSecret, generateURI, verifySync } from 'otplib'
+import QRCode from 'qrcode'
 import { getServerSession } from 'next-auth'
 import { headers } from 'next/headers'
 import { authOptions } from '@/lib/auth'
@@ -121,7 +122,15 @@ export async function setupMFA() {
     data: { mfaSecret: secret, mfaEnabled: false },
   })
 
-  return { secret, otpauthUrl }
+  // Antes disto, a tela mostrava um ícone genérico no lugar do QR Code (não
+  // havia nenhuma biblioteca de geração de QR no projeto) — o usuário só
+  // conseguia configurar o app autenticador digitando a chave manualmente,
+  // e um erro de digitação nesse passo faz todo login com MFA falhar depois,
+  // mesmo com o código do app "certo". Gerar o PNG (data URL) aqui evita
+  // expor uma lib de QR no bundle do cliente.
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl)
+
+  return { secret, otpauthUrl, qrCodeDataUrl }
 }
 
 export async function verifyAndEnableMFA(formData: FormData) {
