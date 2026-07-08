@@ -49,7 +49,11 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
-          const valid = verifySync({ token: credentials.totpCode, secret: user.mfaSecret })
+          // epochTolerance: 30 — aceita o código do step anterior/seguinte
+          // (±30s). Sem isso, otplib v13 usa tolerância zero por padrão e
+          // rejeita códigos válidos só pelo tempo de digitação do usuário
+          // ou pequena diferença de relógio entre servidor e celular.
+          const valid = verifySync({ token: credentials.totpCode, secret: user.mfaSecret, epochTolerance: 30 })
           if (!valid?.valid) {
             await logAudit({ userId: user.id, acao: 'MFA_FALHOU', entidade: 'User', entidadeId: user.id, valorNovo: { email, motivo: 'codigo_invalido' } })
             throw new Error('MFA_INVALID')

@@ -134,7 +134,9 @@ export async function verifyAndEnableMFA(formData: FormData) {
   const user = await db.user.findUnique({ where: { id: session.user.id } })
   if (!user?.mfaSecret) return { error: 'Configuração de MFA não encontrada' }
 
-  const result = verifySync({ token: code, secret: user.mfaSecret })
+  // epochTolerance: 30 — mesmo motivo do login em lib/auth.ts: sem isso,
+  // otplib v13 rejeita o código só pelo tempo de digitação/clock drift.
+  const result = verifySync({ token: code, secret: user.mfaSecret, epochTolerance: 30 })
   if (!result?.valid) return { error: 'Código inválido. Tente novamente.' }
 
   await db.user.update({
