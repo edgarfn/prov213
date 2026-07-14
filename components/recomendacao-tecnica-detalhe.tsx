@@ -25,8 +25,8 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Lock } from 'lucide-react'
 
-const PRIORIDADE_LABEL: Record<string, string> = { BAIXO: 'Baixo', MEDIO: 'Médio', ALTO: 'Alto', CRITICO: 'Crítico' }
-const STATUS_LABEL: Record<string, string> = {
+export const PRIORIDADE_LABEL: Record<string, string> = { BAIXO: 'Baixo', MEDIO: 'Médio', ALTO: 'Alto', CRITICO: 'Crítico' }
+export const STATUS_LABEL: Record<string, string> = {
   RASCUNHO: 'Rascunho',
   COMPLEMENTACAO_SOLICITADA: 'Complementação técnica solicitada',
   AGUARDANDO_PARECER_DPO: 'Aguardando parecer do DPO',
@@ -39,7 +39,7 @@ const STATUS_LABEL: Record<string, string> = {
   AGUARDANDO_ATUALIZACAO_DOCUMENTOS: 'Aguardando atualização dos documentos',
   CONCLUIDO: 'Concluído',
 }
-const DECISAO_LABEL: Record<string, string> = {
+export const DECISAO_LABEL: Record<string, string> = {
   APROVADO_INTEGRAL: 'Aprovado integralmente',
   APROVADO_COM_CONDICOES: 'Aprovado com condições',
   APROVADO_IMPLANTACAO_FUTURA: 'Aprovado para implantação futura',
@@ -48,7 +48,7 @@ const DECISAO_LABEL: Record<string, string> = {
   RISCO_ACEITO_TEMPORARIO: 'Risco aceito temporariamente, com prazo corretivo',
   SUBSTITUIDO_EQUIVALENTE: 'Substituído por solução tecnicamente equivalente',
 }
-const RESULTADO_ACEITE_LABEL: Record<string, string> = {
+export const RESULTADO_ACEITE_LABEL: Record<string, string> = {
   INTEGRAL: 'Aceite integral', PARCIAL: 'Aceite parcial', NAO_CONFORME: 'Rejeição (não conforme)',
 }
 
@@ -56,7 +56,7 @@ function selectLabel(map: Record<string, string>) {
   return (value: unknown) => map[String(value)] ?? String(value)
 }
 
-function CampoLeitura({ label, value }: { label: string; value: string | null | undefined }) {
+export function CampoLeitura({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null
   return (
     <div>

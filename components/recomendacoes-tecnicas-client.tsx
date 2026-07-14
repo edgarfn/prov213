@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { criarRecomendacao } from '@/app/actions/recomendacao-tecnica'
 import { RecomendacaoTecnicaDetalhe, type RecomendacaoComRelacoes } from '@/components/recomendacao-tecnica-detalhe'
+import { RecomendacaoTecnicaModeloButton } from '@/components/recomendacao-tecnica-modelo'
 import { InfoTooltip } from '@/components/info-tooltip'
 import type { RolePapel } from '@/types/prisma'
 import { format } from 'date-fns'
@@ -114,11 +115,14 @@ export function RecomendacoesTecnicasClient({ serventiaId, recomendacoes, membro
             <InfoTooltip chave="RECOMENDACAO_TECNICA" />
           </p>
         </div>
-        {!somenteLeitura && (
-          <Button size="sm" onClick={() => { setForm({ ...FORM_INITIAL, responsavelTecnicoId: membros[0]?.id ?? '' }); setError(null); setCreateOpen(true) }}>
-            <Plus className="h-4 w-4 mr-2" /> Nova recomendação
-          </Button>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <RecomendacaoTecnicaModeloButton />
+          {!somenteLeitura && (
+            <Button size="sm" onClick={() => { setForm({ ...FORM_INITIAL, responsavelTecnicoId: membros[0]?.id ?? '' }); setError(null); setCreateOpen(true) }}>
+              <Plus className="h-4 w-4 mr-2" /> Nova recomendação
+            </Button>
+          )}
+        </div>
       </div>
 
       {!existeTitular && (
