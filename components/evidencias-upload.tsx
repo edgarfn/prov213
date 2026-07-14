@@ -29,6 +29,7 @@ interface EvidenciasUploadProps {
   testeRestauracaoId?: string
   incidenteId?: string
   vulnerabilidadeId?: string
+  recomendacaoTecnicaId?: string
   evidencias: Evidencia[]
   /** Se false, esconde os botões de ação (modo leitura) */
   podeEditar?: boolean
@@ -51,6 +52,7 @@ export function EvidenciasUpload({
   testeRestauracaoId,
   incidenteId,
   vulnerabilidadeId,
+  recomendacaoTecnicaId,
   evidencias,
   podeEditar = true,
   podeExcluir = true,
@@ -84,6 +86,7 @@ export function EvidenciasUpload({
     if (testeRestauracaoId) fd.append('testeRestauracaoId', testeRestauracaoId)
     if (incidenteId) fd.append('incidenteId', incidenteId)
     if (vulnerabilidadeId) fd.append('vulnerabilidadeId', vulnerabilidadeId)
+    if (recomendacaoTecnicaId) fd.append('recomendacaoTecnicaId', recomendacaoTecnicaId)
     fd.append('tipo', tipo)
 
     try {

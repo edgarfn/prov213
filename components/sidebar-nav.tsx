@@ -17,6 +17,7 @@ import {
   Users,
   ScrollText,
   FileBarChart,
+  Lightbulb,
 } from 'lucide-react'
 
 interface NavItem {
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { href: '/incidentes', label: 'Incidentes', icon: ShieldAlert },
   { href: '/vulnerabilidades', label: 'Vulnerabilidades', icon: Bug },
   { href: '/testes-restauracao', label: 'Testes de Restauração', icon: HardDriveDownload },
+  { href: '/recomendacoes-tecnicas', label: 'Recomendações Técnicas', icon: Lightbulb },
   { href: '/relatorios', label: 'Relatórios', icon: FileBarChart, hideForAuditor: true },
   { href: '/configuracoes/usuarios', label: 'Usuários', icon: Users, hideForAuditor: true },
   { href: '/configuracoes/backup', label: 'Backup', icon: Database, hideForAuditor: true },

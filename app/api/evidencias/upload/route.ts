@@ -23,12 +23,13 @@ export async function POST(req: NextRequest) {
   const testeRestauracaoId = (formData.get('testeRestauracaoId') as string) || null
   const incidenteId = (formData.get('incidenteId') as string) || null
   const vulnerabilidadeId = (formData.get('vulnerabilidadeId') as string) || null
+  const recomendacaoTecnicaId = (formData.get('recomendacaoTecnicaId') as string) || null
   const tipo = (formData.get('tipo') as string) || 'DOCUMENTO'
 
-  const origensInformadas = [requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId].filter(Boolean).length
+  const origensInformadas = [requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId, recomendacaoTecnicaId].filter(Boolean).length
   if (!file || !serventiaId || origensInformadas !== 1) {
     return NextResponse.json(
-      { error: 'Informe o arquivo, a serventia e exatamente uma origem: requisitoId, testeRestauracaoId, incidenteId ou vulnerabilidadeId' },
+      { error: 'Informe o arquivo, a serventia e exatamente uma origem: requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId ou recomendacaoTecnicaId' },
       { status: 400 },
     )
   }
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
     testeRestauracaoId?: string
     incidenteId?: string
     vulnerabilidadeId?: string
+    recomendacaoTecnicaId?: string
   }
   if (requisitoId) {
     const progresso = await db.progressoRequisito.findUnique({
@@ -80,15 +82,24 @@ export async function POST(req: NextRequest) {
     }
     origemId = incidente.id
     evidenciaData = { incidenteId: incidente.id }
-  } else {
+  } else if (vulnerabilidadeId) {
     const vulnerabilidade = await db.vulnerabilidade.findFirst({
-      where: { id: vulnerabilidadeId!, serventiaId },
+      where: { id: vulnerabilidadeId, serventiaId },
     })
     if (!vulnerabilidade) {
       return NextResponse.json({ error: 'Vulnerabilidade não encontrada para esta serventia' }, { status: 404 })
     }
     origemId = vulnerabilidade.id
     evidenciaData = { vulnerabilidadeId: vulnerabilidade.id }
+  } else {
+    const recomendacao = await db.recomendacaoTecnica.findFirst({
+      where: { id: recomendacaoTecnicaId!, serventiaId },
+    })
+    if (!recomendacao) {
+      return NextResponse.json({ error: 'Recomendação técnica não encontrada para esta serventia' }, { status: 404 })
+    }
+    origemId = recomendacao.id
+    evidenciaData = { recomendacaoTecnicaId: recomendacao.id }
   }
 
   // Calcular SHA-256
@@ -124,7 +135,7 @@ export async function POST(req: NextRequest) {
     acao: 'EVIDENCIA_UPLOAD',
     entidade: 'Evidencia',
     entidadeId: evidencia.id,
-    valorNovo: { nomeArquivo: file.name, hashSha256, tamanhoBytes: file.size, tipo, requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId },
+    valorNovo: { nomeArquivo: file.name, hashSha256, tamanhoBytes: file.size, tipo, requisitoId, testeRestauracaoId, incidenteId, vulnerabilidadeId, recomendacaoTecnicaId },
     ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip'),
     userAgent: req.headers.get('user-agent'),
   })

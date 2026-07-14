@@ -9,6 +9,7 @@ import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 import { prazoVulnerabilidade } from '@/lib/business-rules'
 import { runLogged } from '@/lib/logger'
+import { optionalText, optionalId, clearableId, boolFromString } from '@/lib/zod-form-helpers'
 
 const CLASSIFICACOES = ['BAIXO', 'MEDIO', 'ALTO', 'CRITICO'] as const
 const ORIGENS = [
@@ -17,10 +18,6 @@ const ORIGENS = [
 ] as const
 const STATUS_TERMINAIS = ['CORRIGIDA', 'RISCO_ACEITO', 'FALSO_POSITIVO'] as const
 
-const optionalText = z.string().optional().transform((s) => (s?.trim() ? s.trim() : undefined))
-const optionalId = z.string().optional().transform((s) => (s?.trim() && s !== '_none' ? s.trim() : undefined))
-const clearableId = z.string().optional().transform((s) => (s?.trim() && s !== '_none' ? s.trim() : null))
-const boolFromString = z.string().optional().transform((s) => (s === undefined ? undefined : s === 'true'))
 const optionalCvss = z.string().optional().transform((s) => {
   if (!s?.trim()) return undefined
   const n = Number(s)

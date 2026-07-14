@@ -113,6 +113,33 @@ enum FluxoProrrogacao {
   FORMAL
 }
 
+/// Máquina de estados do processo de Recomendação Técnica e Decisão do
+/// Controlador (ver model RecomendacaoTecnica). Estados terminais: REJEITADO,
+/// RISCO_ACEITO_TEMPORARIO e CONCLUIDO.
+enum StatusRecomendacao {
+  RASCUNHO
+  COMPLEMENTACAO_SOLICITADA
+  AGUARDANDO_PARECER_DPO
+  AGUARDANDO_DECISAO
+  REJEITADO
+  RISCO_ACEITO_TEMPORARIO
+  APROVADO_AGUARDANDO_IMPLEMENTACAO
+  EM_IMPLEMENTACAO
+  AGUARDANDO_ACEITE
+  AGUARDANDO_ATUALIZACAO_DOCUMENTOS
+  CONCLUIDO
+}
+
+enum DecisaoControlador {
+  APROVADO_INTEGRAL
+  APROVADO_COM_CONDICOES
+  APROVADO_IMPLANTACAO_FUTURA
+  COMPLEMENTACAO_SOLICITADA
+  REJEITADO
+  RISCO_ACEITO_TEMPORARIO
+  SUBSTITUIDO_EQUIVALENTE
+}
+
 // ─── NextAuth ─────────────────────────────────────────────────────────────────
 
 model Account {
@@ -174,6 +201,13 @@ model User {
   vulnerabilidadesResponsavel Vulnerabilidade[]
   auditLogs                   AuditLog[]
   passwordResets              PasswordResetToken[]
+  recomendacoesResponsavelTecnico  RecomendacaoTecnica[] @relation("RT_ResponsavelTecnico")
+  recomendacoesParecerDpo         RecomendacaoTecnica[] @relation("RT_ParecerDpo")
+  recomendacoesDecisaoControlador RecomendacaoTecnica[] @relation("RT_DecisaoControlador")
+  recomendacoesResponsavelExecucao RecomendacaoTecnica[] @relation("RT_ResponsavelExecucao")
+  recomendacoesOrdemEmitidaPor    RecomendacaoTecnica[] @relation("RT_OrdemEmitidaPor")
+  recomendacoesAceiteTecnico      RecomendacaoTecnica[] @relation("RT_AceiteTecnico")
+  recomendacoesAceiteControlador  RecomendacaoTecnica[] @relation("RT_AceiteControlador")
 }
 
 // ─── Reset de senha ───────────────────────────────────────────────────────────
@@ -229,6 +263,8 @@ model Serventia {
   declaracoes       Declaracao[]
   auditLogs         AuditLog[]
   prorrogacoes      Prorrogacao[]
+  recomendacoesTecnicas   RecomendacaoTecnica[]
+  recomendacaoSequenciais RecomendacaoSequencial[]
 }
 
 model MembroServentia {
@@ -301,14 +337,17 @@ model ProgressoRequisito {
 // ─── Evidências ───────────────────────────────────────────────────────────────
 
 /// Vinculada a exatamente uma origem: um ProgressoRequisito (dossiê do
-/// checklist) ou um TesteRestauracao (Anexo V) — nunca ambos, nunca nenhum
-/// (reforçado por CHECK constraint no banco; ver migration correspondente).
+/// checklist), um TesteRestauracao (Anexo V), um Incidente, uma
+/// Vulnerabilidade ou uma RecomendacaoTecnica — nunca mais de uma, nunca
+/// nenhuma (reforçado por CHECK constraint no banco; ver migration
+/// correspondente).
 model Evidencia {
-  id                   String              @id @default(cuid())
-  progressoRequisitoId String?
-  testeRestauracaoId   String?
-  incidenteId          String?
-  vulnerabilidadeId    String?
+  id                     String              @id @default(cuid())
+  progressoRequisitoId   String?
+  testeRestauracaoId     String?
+  incidenteId            String?
+  vulnerabilidadeId      String?
+  recomendacaoTecnicaId  String?
   nomeArquivo          String
   storagePath          String
   hashSha256           String
@@ -317,14 +356,16 @@ model Evidencia {
   uploadedBy           String
   uploadedAt           DateTime            @default(now())
   deletedAt            DateTime?
-  progressoRequisito   ProgressoRequisito? @relation(fields: [progressoRequisitoId], references: [id])
-  testeRestauracao     TesteRestauracao?   @relation(fields: [testeRestauracaoId], references: [id])
-  incidente            Incidente?          @relation(fields: [incidenteId], references: [id])
-  vulnerabilidade      Vulnerabilidade?    @relation(fields: [vulnerabilidadeId], references: [id])
+  progressoRequisito   ProgressoRequisito?  @relation(fields: [progressoRequisitoId], references: [id])
+  testeRestauracao     TesteRestauracao?    @relation(fields: [testeRestauracaoId], references: [id])
+  incidente            Incidente?           @relation(fields: [incidenteId], references: [id])
+  vulnerabilidade      Vulnerabilidade?     @relation(fields: [vulnerabilidadeId], references: [id])
+  recomendacaoTecnica  RecomendacaoTecnica? @relation(fields: [recomendacaoTecnicaId], references: [id])
 
   @@index([testeRestauracaoId])
   @@index([incidenteId])
   @@index([vulnerabilidadeId])
+  @@index([recomendacaoTecnicaId])
 }
 
 // ─── Incidentes ───────────────────────────────────────────────────────────────
@@ -479,6 +520,129 @@ model Prorrogacao {
   serventia            Serventia         @relation(fields: [serventiaId], references: [id])
 
   @@index([serventiaId, status])
+}
+
+// ─── Recomendação Técnica e Decisão do Controlador ────────────────────────────
+// Processo de governança de TI/LGPD em 8 etapas: Recomendação Técnica →
+// Análise de Risco → Parecer do DPO (se envolver dados pessoais) → Decisão
+// formal do Controlador → Ordem de Implementação → Execução/Evidências →
+// Teste e Aceite → Atualização dos documentos de governança. Alimenta como
+// evidência os Requisitos 1.1, 1.2, 1.4, 1.8, 2.5 e 4.3 do seed.
+
+model RecomendacaoTecnica {
+  id            String @id @default(cuid())
+  serventiaId   String
+  /// Código legível RT-{CNS}-{ANO}-{SEQ}, ex.: RT-12345-2026-001
+  codigo        String @unique
+  anoReferencia Int
+  sequencial    Int
+
+  status                  StatusRecomendacao @default(RASCUNHO)
+  /// Etapa 1 — prioridade declarada na recomendação
+  prioridade              ClassificacaoRisco
+  /// Etapa 2 — classificação de risco resultante da análise
+  classificacaoRiscoFinal ClassificacaoRisco?
+  /// Etapa 2 — determina se a Etapa 3 (Parecer do DPO) é exigida
+  envolveDadosPessoais    Boolean            @default(false)
+
+  dataIdentificacao    DateTime
+  /// Prazo recomendado na Etapa 1 (informativo; alimenta alerta de semáforo)
+  prazoRecomendado     DateTime?
+  responsavelTecnicoId String
+
+  /// Etapa 1 (GOV-TI-01): situacaoAtual, problemaDeficiencia, requisitoRelacionado,
+  /// ativoAfetado, riscoNaoImplementar, solucaoRecomendada, alternativasPossiveis,
+  /// estimativaCusto, evidenciasColetadasObs
+  recomendacao Json
+
+  /// Etapa 2 (GOV-TI-02): probabilidadeOcorrencia, impactoOperacional,
+  /// impactoDadosPessoais, impactoAcervoRegistral, impactoFinanceiro,
+  /// impactoJuridicoCorrecional, controlesExistentes, controlesRecomendados,
+  /// riscoResidualAposImplementacao, consequenciaRejeicao, relacaoPcnPrd, relacaoRpoRto
+  analiseRisco Json?
+
+  /// Preenchido com o autor no momento do registro (gate já garante papel DPO)
+  parecerDpoUserId      String?
+  parecerDpoConcluidoEm DateTime?
+  /// Etapa 3 (GOV-TI-03): necessidadeProporcionalidade, dadosSensiveisEnvolvidos,
+  /// novosFornecedores, acessosRemotos, armazenamentoNuvem, transferenciaInternacional,
+  /// logsMonitoramento, retencao, contratosOperadores, riscoTitulares,
+  /// necessidadeRipd, necessidadeAtualizarRopa, conclusao
+  parecerDpo            Json?
+
+  decisao                  DecisaoControlador?
+  /// Preenchido com o autor no momento da decisão (gate já garante papel TITULAR)
+  decisaoControladorUserId String?
+  dataDecisao              DateTime?
+  valorAutorizado          Float?
+  /// Usado em alerta de semáforo enquanto status = APROVADO_AGUARDANDO_IMPLEMENTACAO/EM_IMPLEMENTACAO
+  prazoImplantacao         DateTime?
+  responsavelExecucaoId    String?
+  /// Etapa 4: fonteOrcamentaria, condicoesImpostas, riscoResidualConhecido
+  decisaoDetalhes          Json?
+
+  /// Usado em alerta de semáforo enquanto status = RISCO_ACEITO_TEMPORARIO
+  prazoReavaliacao DateTime?
+  /// GOV-TI-09 (obrigatório quando decisao IN (REJEITADO, RISCO_ACEITO_TEMPORARIO)):
+  /// fundamentoTecnico, consequenciasRejeicao, alternativasApresentadas,
+  /// motivoDeclarado, medidasCompensatorias
+  termoCiencia     Json?
+
+  dataExecucaoPlanejada DateTime?
+  ordemEmitidaPorUserId String?
+  ordemEmitidaEm        DateTime?
+  /// Etapa 5 (GOV-TI-05): escopoAprovado, equipamentosServicos, responsaveis,
+  /// planoRollback, riscosMudanca, backupAnterior, criteriosSucesso,
+  /// testesObrigatorios, indisponibilidadePrevista, comunicacaoColaboradores,
+  /// autorizacaoAcessoPrivilegiado
+  ordemImplementacao    Json?
+
+  dataExecucaoRealizada DateTime?
+  /// Etapa 6 (GOV-TI-06): relatorioTecnico, configuracaoAnterior, configuracaoPosterior,
+  /// usuariosExecutores, resultadosTestes, falhas, medidasCorretivas
+  /// (evidências reais em anexo via relação Evidencia, não aqui)
+  execucao              Json?
+
+  aceiteResultado         ConformidadeTeste?
+  aceiteTecnicoUserId     String?
+  /// Deve ser membro ativo com papel TITULAR (validado na action)
+  aceiteControladorUserId String?
+  dataAceite              DateTime?
+  /// Etapa 7 (GOV-TI-07): requisitoAtendido, testesRealizados, resultadoObtido,
+  /// pendencias, riscoResidual
+  aceite                  Json?
+
+  documentosAtualizadosEm DateTime?
+  /// Etapa 8 (GOV-TI-10): checklist (inventarioAtivos, diagramaRede, pcn, prd,
+  /// psi, ropa, matrizRiscos, planoBackup, dossieTecnico, outros)
+  documentosAtualizados   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  serventia           Serventia @relation(fields: [serventiaId], references: [id])
+  responsavelTecnico  User      @relation("RT_ResponsavelTecnico", fields: [responsavelTecnicoId], references: [id])
+  parecerDpoUser      User?     @relation("RT_ParecerDpo", fields: [parecerDpoUserId], references: [id])
+  decisaoControlador  User?     @relation("RT_DecisaoControlador", fields: [decisaoControladorUserId], references: [id])
+  responsavelExecucao User?     @relation("RT_ResponsavelExecucao", fields: [responsavelExecucaoId], references: [id])
+  ordemEmitidaPor     User?     @relation("RT_OrdemEmitidaPor", fields: [ordemEmitidaPorUserId], references: [id])
+  aceiteTecnico       User?     @relation("RT_AceiteTecnico", fields: [aceiteTecnicoUserId], references: [id])
+  aceiteControlador   User?     @relation("RT_AceiteControlador", fields: [aceiteControladorUserId], references: [id])
+  evidencias          Evidencia[]
+
+  @@unique([serventiaId, anoReferencia, sequencial])
+  @@index([serventiaId, status])
+}
+
+/// Contador atômico por serventia/ano para o código RT-{CNS}-{ANO}-{SEQ}
+/// (ver lib/recomendacao-tecnica.ts::proximoCodigoRecomendacao).
+model RecomendacaoSequencial {
+  serventiaId  String
+  ano          Int
+  ultimoNumero Int       @default(0)
+  serventia    Serventia @relation(fields: [serventiaId], references: [id])
+
+  @@id([serventiaId, ano])
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────

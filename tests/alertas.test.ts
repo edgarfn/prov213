@@ -15,6 +15,10 @@ function baseInput(overrides: Partial<MontarAlertasInput> = {}): MontarAlertasIn
     ultimoTesteData: addDays(HOJE, -10), // testado recentemente
     testeRestauracaoMeses: 12,
     prorrogacaoPendente: false,
+    recomendacoesAguardandoParecerDpo: [],
+    recomendacoesAguardandoDecisao: [],
+    recomendacoesComPrazoImplantacao: [],
+    recomendacoesComPrazoReavaliacao: [],
     ...overrides,
   }
 }
@@ -111,6 +115,55 @@ describe('montarAlertas', () => {
       severidade: 'amarelo',
       href: '/configuracoes',
     })
+  })
+
+  it('Recomendação aguardando parecer do DPO gera alerta amarelo', () => {
+    const alertas = montarAlertas(
+      baseInput({ recomendacoesAguardandoParecerDpo: [{ id: 'rt-1', codigo: 'RT-123-2026-001' }] }),
+    )
+    expect(alertas).toHaveLength(1)
+    expect(alertas[0]).toMatchObject({
+      tipo: 'RECOMENDACAO_AGUARDANDO_PARECER_DPO',
+      severidade: 'amarelo',
+      href: '/recomendacoes-tecnicas',
+    })
+  })
+
+  it('Recomendação aguardando decisão do Controlador gera alerta amarelo', () => {
+    const alertas = montarAlertas(
+      baseInput({ recomendacoesAguardandoDecisao: [{ id: 'rt-2', codigo: 'RT-123-2026-002' }] }),
+    )
+    expect(alertas).toHaveLength(1)
+    expect(alertas[0]).toMatchObject({ tipo: 'RECOMENDACAO_AGUARDANDO_DECISAO', severidade: 'amarelo' })
+  })
+
+  it('Prazo de implantação confortável não gera alerta', () => {
+    const alertas = montarAlertas(
+      baseInput({
+        recomendacoesComPrazoImplantacao: [{ id: 'rt-3', codigo: 'RT-123-2026-003', prazoImplantacao: addDays(HOJE, 60) }],
+      }),
+    )
+    expect(alertas).toHaveLength(0)
+  })
+
+  it('Prazo de implantação vencido gera alerta vermelho', () => {
+    const alertas = montarAlertas(
+      baseInput({
+        recomendacoesComPrazoImplantacao: [{ id: 'rt-4', codigo: 'RT-123-2026-004', prazoImplantacao: addDays(HOJE, -2) }],
+      }),
+    )
+    expect(alertas).toHaveLength(1)
+    expect(alertas[0]).toMatchObject({ tipo: 'RECOMENDACAO_PRAZO_IMPLANTACAO', severidade: 'vermelho', href: '/recomendacoes-tecnicas' })
+  })
+
+  it('Prazo de reavaliação de risco aceito próximo gera alerta amarelo', () => {
+    const alertas = montarAlertas(
+      baseInput({
+        recomendacoesComPrazoReavaliacao: [{ id: 'rt-5', codigo: 'RT-123-2026-005', prazoReavaliacao: addDays(HOJE, 10) }],
+      }),
+    )
+    expect(alertas).toHaveLength(1)
+    expect(alertas[0]).toMatchObject({ tipo: 'RECOMENDACAO_PRAZO_REAVALIACAO', severidade: 'amarelo' })
   })
 
   it('Ordena vermelho antes de amarelo', () => {

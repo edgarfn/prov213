@@ -26,6 +26,10 @@ export type AlertaTipo =
   | 'VULNERABILIDADE_PRAZO'
   | 'TESTE_RESTAURACAO_ATRASADO'
   | 'PRORROGACAO_PROXIMA_LIMITE'
+  | 'RECOMENDACAO_AGUARDANDO_PARECER_DPO'
+  | 'RECOMENDACAO_AGUARDANDO_DECISAO'
+  | 'RECOMENDACAO_PRAZO_IMPLANTACAO'
+  | 'RECOMENDACAO_PRAZO_REAVALIACAO'
 
 export interface Alerta {
   id: string
@@ -62,6 +66,14 @@ export interface MontarAlertasInput {
   testeRestauracaoMeses: number
   /** Existe uma solicitação de prorrogação (Art. 21) aguardando decisão da Corregedoria */
   prorrogacaoPendente: boolean
+  /** Recomendações Técnicas aguardando parecer do DPO (Etapa 3) */
+  recomendacoesAguardandoParecerDpo: Array<{ id: string; codigo: string }>
+  /** Recomendações Técnicas aguardando decisão do Controlador (Etapa 4) */
+  recomendacoesAguardandoDecisao: Array<{ id: string; codigo: string }>
+  /** Recomendações aprovadas com prazo de implantação definido, ainda não concluídas */
+  recomendacoesComPrazoImplantacao: Array<{ id: string; codigo: string; prazoImplantacao: Date }>
+  /** Recomendações com risco aceito temporariamente, aguardando reavaliação */
+  recomendacoesComPrazoReavaliacao: Array<{ id: string; codigo: string; prazoReavaliacao: Date }>
 }
 
 /** Função pura de composição — sem acesso a banco, 100% testável. */
@@ -75,6 +87,10 @@ export function montarAlertas(input: MontarAlertasInput): Alerta[] {
     ultimoTesteData,
     testeRestauracaoMeses,
     prorrogacaoPendente,
+    recomendacoesAguardandoParecerDpo,
+    recomendacoesAguardandoDecisao,
+    recomendacoesComPrazoImplantacao,
+    recomendacoesComPrazoReavaliacao,
   } = input
   const alertas: Alerta[] = []
 
@@ -155,6 +171,64 @@ export function montarAlertas(input: MontarAlertasInput): Alerta[] {
     })
   }
 
+  for (const rec of recomendacoesAguardandoParecerDpo) {
+    alertas.push({
+      id: `RECOMENDACAO_AGUARDANDO_PARECER_DPO:${rec.id}`,
+      tipo: 'RECOMENDACAO_AGUARDANDO_PARECER_DPO',
+      severidade: 'amarelo',
+      titulo: `Recomendação ${rec.codigo} aguardando parecer do DPO`,
+      descricao: 'Envolve dados pessoais — o parecer de privacidade precisa ser registrado antes da decisão.',
+      prazo: null,
+      href: '/recomendacoes-tecnicas',
+    })
+  }
+
+  for (const rec of recomendacoesAguardandoDecisao) {
+    alertas.push({
+      id: `RECOMENDACAO_AGUARDANDO_DECISAO:${rec.id}`,
+      tipo: 'RECOMENDACAO_AGUARDANDO_DECISAO',
+      severidade: 'amarelo',
+      titulo: `Recomendação ${rec.codigo} aguardando decisão do Controlador`,
+      descricao: 'A análise de risco (e o parecer do DPO, quando exigido) já foram concluídos.',
+      prazo: null,
+      href: '/recomendacoes-tecnicas',
+    })
+  }
+
+  for (const rec of recomendacoesComPrazoImplantacao) {
+    const severidade = calcularSemaforo(rec.prazoImplantacao, hoje)
+    if (severidade === 'verde') continue
+    alertas.push({
+      id: `RECOMENDACAO_PRAZO_IMPLANTACAO:${rec.id}`,
+      tipo: 'RECOMENDACAO_PRAZO_IMPLANTACAO',
+      severidade,
+      titulo: `Prazo de implantação da recomendação ${rec.codigo}`,
+      descricao:
+        severidade === 'vermelho'
+          ? 'Prazo de implantação vencido.'
+          : `Prazo até ${rec.prazoImplantacao.toLocaleDateString('pt-BR')}.`,
+      prazo: rec.prazoImplantacao,
+      href: '/recomendacoes-tecnicas',
+    })
+  }
+
+  for (const rec of recomendacoesComPrazoReavaliacao) {
+    const severidade = calcularSemaforo(rec.prazoReavaliacao, hoje)
+    if (severidade === 'verde') continue
+    alertas.push({
+      id: `RECOMENDACAO_PRAZO_REAVALIACAO:${rec.id}`,
+      tipo: 'RECOMENDACAO_PRAZO_REAVALIACAO',
+      severidade,
+      titulo: `Reavaliação do risco aceito na recomendação ${rec.codigo}`,
+      descricao:
+        severidade === 'vermelho'
+          ? 'Prazo de reavaliação do risco aceito vencido.'
+          : `Reavaliação prevista para ${rec.prazoReavaliacao.toLocaleDateString('pt-BR')}.`,
+      prazo: rec.prazoReavaliacao,
+      href: '/recomendacoes-tecnicas',
+    })
+  }
+
   const proximoTeste = proximoTesteRestauracaoDevido(ultimoTesteData, testeRestauracaoMeses)
   if (testeRestauracaoAtrasado(proximoTeste, hoje)) {
     alertas.push({
@@ -203,8 +277,17 @@ export async function getAlertasServentia(
     select: { classe: true, dataVigenciaNorma: true },
   })
 
-  const [incidentesCriticosAbertos, vulnerabilidadesAbertas, ultimoTeste, prorrogacaoNovaData, prorrogacaoPendente] =
-    await Promise.all([
+  const [
+    incidentesCriticosAbertos,
+    vulnerabilidadesAbertas,
+    ultimoTeste,
+    prorrogacaoNovaData,
+    prorrogacaoPendente,
+    recomendacoesAguardandoParecerDpo,
+    recomendacoesAguardandoDecisao,
+    recomendacoesComPrazoImplantacaoRaw,
+    recomendacoesComPrazoReavaliacaoRaw,
+  ] = await Promise.all([
       db.incidente.findMany({
         where: { serventiaId, gravidade: 'CRITICO', status: { not: 'ENCERRADO' } },
         select: { id: true, titulo: true, dataCiencia: true, comunicadoCorregedoria: true },
@@ -220,7 +303,38 @@ export async function getAlertasServentia(
       }),
       getProrrogacaoAtivaData(serventiaId),
       db.prorrogacao.findFirst({ where: { serventiaId, status: 'SOLICITADA' }, select: { id: true } }),
+      db.recomendacaoTecnica.findMany({
+        where: { serventiaId, status: 'AGUARDANDO_PARECER_DPO' },
+        select: { id: true, codigo: true },
+      }),
+      db.recomendacaoTecnica.findMany({
+        where: { serventiaId, status: 'AGUARDANDO_DECISAO' },
+        select: { id: true, codigo: true },
+      }),
+      db.recomendacaoTecnica.findMany({
+        where: {
+          serventiaId,
+          prazoImplantacao: { not: null },
+          status: { in: ['APROVADO_AGUARDANDO_IMPLEMENTACAO', 'EM_IMPLEMENTACAO'] },
+        },
+        select: { id: true, codigo: true, prazoImplantacao: true },
+      }),
+      db.recomendacaoTecnica.findMany({
+        where: { serventiaId, status: 'RISCO_ACEITO_TEMPORARIO', prazoReavaliacao: { not: null } },
+        select: { id: true, codigo: true, prazoReavaliacao: true },
+      }),
     ])
+
+  const recomendacoesComPrazoImplantacao = recomendacoesComPrazoImplantacaoRaw.map((r) => ({
+    id: r.id,
+    codigo: r.codigo,
+    prazoImplantacao: r.prazoImplantacao as Date,
+  }))
+  const recomendacoesComPrazoReavaliacao = recomendacoesComPrazoReavaliacaoRaw.map((r) => ({
+    id: r.id,
+    codigo: r.codigo,
+    prazoReavaliacao: r.prazoReavaliacao as Date,
+  }))
 
   const prazos = calcularPrazos(serventia.dataVigenciaNorma, serventia.classe, !!prorrogacaoNovaData, prorrogacaoNovaData)
   const params = parametrosPorClasse(serventia.classe)
@@ -235,6 +349,10 @@ export async function getAlertasServentia(
     ultimoTesteData: ultimoTeste?.dataTeste ?? null,
     testeRestauracaoMeses: params.testeRestauracaoMeses,
     prorrogacaoPendente: !!prorrogacaoPendente,
+    recomendacoesAguardandoParecerDpo,
+    recomendacoesAguardandoDecisao,
+    recomendacoesComPrazoImplantacao,
+    recomendacoesComPrazoReavaliacao,
   })
 
   return resumirAlertas(alertas)

@@ -8,26 +8,13 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 import { runLogged } from '@/lib/logger'
+import { optionalText, optionalId, clearableId, boolFromString, optionalInt } from '@/lib/zod-form-helpers'
 
 const CATEGORIAS = [
   'ACESSO_NAO_AUTORIZADO', 'MALWARE_RANSOMWARE', 'VAZAMENTO_DADOS',
   'INDISPONIBILIDADE_DOS', 'PHISHING_ENGENHARIA_SOCIAL', 'FALHA_CONFIGURACAO',
   'PERDA_ROUBO_DISPOSITIVO', 'FISICO', 'OUTRO',
 ] as const
-
-const optionalText = z.string().optional().transform((s) => (s?.trim() ? s.trim() : undefined))
-const optionalId = z.string().optional().transform((s) => (s?.trim() && s !== '_none' ? s.trim() : undefined))
-// "_none"/vazio vira null explícito (limpa a atribuição) — usado só na
-// atualização, onde o formulário sempre reenvia o valor atual do campo.
-const clearableId = z.string().optional().transform((s) => (s?.trim() && s !== '_none' ? s.trim() : null))
-// undefined quando o campo nem é enviado (atualização parcial não deve
-// resetar o valor já salvo) — só vira boolean quando explicitamente enviado.
-const boolFromString = z.string().optional().transform((s) => (s === undefined ? undefined : s === 'true'))
-const optionalInt = z.string().optional().transform((s) => {
-  if (!s?.trim()) return undefined
-  const n = Number(s)
-  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : undefined
-})
 
 const incidenteSchema = z.object({
   titulo: z.string().min(3),

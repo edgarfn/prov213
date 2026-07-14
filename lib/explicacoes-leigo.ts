@@ -60,6 +60,45 @@ export const EXPLICACOES_LEIGO = {
     '"Risco aceito" significa que a serventia decidiu, formalmente e por escrito, conviver com essa falha ' +
     'em vez de corrigi-la agora (ex.: custo desproporcional, mitigação já suficiente por outro controle). ' +
     'Diferente de simplesmente ignorar o problema — exige justificativa registrada e é auditável.',
+  RECOMENDACAO_TECNICA:
+    'Processo formal para propor, analisar e decidir mudanças relevantes de tecnologia ou segurança. Quem ' +
+    'identifica o problema (Responsável Técnico) recomenda a solução; quem decide, autoriza ou rejeita é ' +
+    'sempre o Controlador de Dados (o Titular da serventia) — nunca a mesma pessoa que recomendou.',
+  CODIGO_RECOMENDACAO:
+    'Identificador único no formato RT-{CNS}-{ano}-{número sequencial}, ex.: RT-12345-2026-001 — gerado ' +
+    'automaticamente na criação, um número por serventia a cada ano.',
+  ANALISE_RISCO_CONFORMIDADE:
+    'Avaliação de quão provável e quão grave seria o problema se nada fosse feito, e de como isso se ' +
+    'relaciona com o Plano de Continuidade (PCN), o Plano de Recuperação (PRD) e os parâmetros de RPO/RTO ' +
+    'já definidos pela serventia.',
+  PARECER_PRIVACIDADE_DPO:
+    'Avaliação independente do encarregado (DPO) sobre os impactos da mudança na proteção de dados pessoais ' +
+    '— só é exigida quando a recomendação envolve tratamento de dados pessoais. O DPO não decide se a ' +
+    'mudança será feita, só avalia os riscos de privacidade envolvidos.',
+  DECISAO_CONTROLADOR:
+    'Decisão formal de quem responde legalmente pela serventia (o Titular, interino ou interventor — o ' +
+    '"Controlador de Dados" da LGPD). Só ele pode aprovar, rejeitar ou aceitar temporariamente o risco de ' +
+    'uma recomendação técnica; uma autorização verbal ou por mensagem informal não é suficiente.',
+  TERMO_CIENCIA_RISCO:
+    'Documento que registra formalmente que o Controlador tomou ciência dos riscos antes de rejeitar a ' +
+    'recomendação ou aceitar o risco temporariamente — evita que a decisão fique só na palavra, sem registro ' +
+    'auditável do que foi decidido e por quê.',
+  ORDEM_IMPLEMENTACAO:
+    'Autorização formal para efetivamente executar a mudança já aprovada pelo Controlador — inclui plano de ' +
+    'rollback (como desfazer se algo der errado) e critérios claros de sucesso, para que a execução não ' +
+    'dependa só de combinação verbal.',
+  ACEITE_RECOMENDACAO:
+    'Verificação final de que a mudança implementada realmente resolveu o problema original, testada e ' +
+    'assinada tanto pelo técnico responsável quanto pelo Controlador — só depois disso a recomendação é ' +
+    'considerada tecnicamente encerrada.',
+  ATUALIZACAO_DOCUMENTOS_GOVERNANCA:
+    'Depois de qualquer mudança relevante, os documentos que descrevem a estrutura da serventia (inventário ' +
+    'de ativos, diagramas, PCN, PRD, PSI, ROPA etc.) precisam refletir a nova realidade — senão eles ficam ' +
+    'desatualizados e deixam de servir como prova em uma fiscalização.',
+  RECOMENDACAO_RISCO_ACEITO_TEMPORARIO:
+    'Diferente do "risco aceito" de uma vulnerabilidade específica, aqui o Controlador decide conviver ' +
+    'temporariamente com o risco de não implementar a recomendação, com um prazo definido para reavaliar a ' +
+    'decisão — não é uma aceitação permanente.',
 } as const
 
 export type ExplicacaoLeigoChave = keyof typeof EXPLICACOES_LEIGO

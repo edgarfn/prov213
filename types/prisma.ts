@@ -9,6 +9,7 @@ export type { IncidenteModel as Incidente } from '@/app/generated/prisma/models/
 export type { VulnerabilidadeModel as Vulnerabilidade } from '@/app/generated/prisma/models/Vulnerabilidade'
 export type { TesteRestauracaoModel as TesteRestauracao } from '@/app/generated/prisma/models/TesteRestauracao'
 export type { DeclaracaoModel as Declaracao } from '@/app/generated/prisma/models/Declaracao'
+export type { RecomendacaoTecnicaModel as RecomendacaoTecnica } from '@/app/generated/prisma/models/RecomendacaoTecnica'
 export type {
   ClasseServentia,
   RolePapel,
@@ -21,4 +22,6 @@ export type {
   StatusVulnerabilidade,
   OrigemVulnerabilidade,
   ConformidadeTeste,
+  StatusRecomendacao,
+  DecisaoControlador,
 } from '@/app/generated/prisma/enums'
