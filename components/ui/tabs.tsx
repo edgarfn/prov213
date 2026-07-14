@@ -41,13 +41,25 @@ const tabsListVariants = cva(
 function TabsList({
   className,
   variant = "default",
+  wrap = false,
   ...props
-}: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants>) {
+}: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants> & { wrap?: boolean }) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
+      className={cn(
+        tabsListVariants({ variant }),
+        // A altura fixa (h-8) da variante padrão parte do princípio de uma
+        // única linha de abas. Quando há abas demais para caber numa linha
+        // (ex.: telas de wizard com muitas etapas), `wrap` quebra em várias
+        // linhas — precisa reaproveitar o MESMO seletor `group-data-horizontal/tabs:`
+        // do h-8 original, senão o tailwind-merge não reconhece o conflito
+        // (prefixos de variante diferentes não são mesclados) e a lista
+        // continua com altura fixa, sobrepondo o conteúdo abaixo.
+        wrap && "flex-wrap group-data-horizontal/tabs:h-auto",
+        className,
+      )}
       {...props}
     />
   )

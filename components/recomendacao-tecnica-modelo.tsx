@@ -65,7 +65,7 @@ export function RecomendacaoTecnicaModeloButton() {
             </div>
 
             <Tabs defaultValue="etapa1">
-              <TabsList className="flex-wrap h-auto gap-1">
+              <TabsList wrap className="gap-1">
                 <TabsTrigger value="etapa1">1. Recomendação</TabsTrigger>
                 <TabsTrigger value="etapa2">2. Análise de Risco</TabsTrigger>
                 <TabsTrigger value="etapa3">3. Parecer DPO</TabsTrigger>

@@ -133,7 +133,7 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
       )}
 
       <Tabs defaultValue={`etapa-${etapas[0]?.id}`}>
-        <TabsList className="flex-wrap h-auto gap-1">
+        <TabsList wrap className="gap-1">
           {etapas.map((etapa) => {
             const { total, concluidos } = calcularProgressoEtapa(etapa)
             const pct = total > 0 ? Math.round((concluidos / total) * 100) : 0
