@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
-import { runLogged } from '@/lib/logger'
+import { runLogged, getLogger, logger } from '@/lib/logger'
 
 async function garantirPodeEditar(userId: string, serventiaId: string) {
   const membro = await requireServentiaMembro(userId, serventiaId)
@@ -28,7 +28,8 @@ const testeSchema = z.object({
     try {
       const parsed = JSON.parse(s)
       return z.array(participanteSchema).parse(parsed)
-    } catch {
+    } catch (err) {
+      logger.warn({ err }, 'Payload de "participantes" malformado no teste de restauração — descartado, gravado como lista vazia')
       return []
     }
   }),
@@ -36,7 +37,8 @@ const testeSchema = z.object({
     if (!s) return {}
     try {
       return JSON.parse(s) as Record<string, unknown>
-    } catch {
+    } catch (err) {
+      logger.warn({ err }, 'Payload de "arquiteturaBackup" malformado no teste de restauração — descartado, gravado como objeto vazio')
       return {}
     }
   }),
@@ -65,47 +67,53 @@ export async function criarTesteRestauracao(serventiaId: string, formData: FormD
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão para registrar testes de restauração' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão para registrar testes de restauração' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = testeSchema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos: ' + parsed.error.issues.map((i) => i.message).join('; ') }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = testeSchema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos: ' + parsed.error.issues.map((i) => i.message).join('; ') }
 
-  const conformidade = calcularConformidade(parsed.data)
+    const conformidade = calcularConformidade(parsed.data)
 
-  const result = await runLogged('criarTesteRestauracao', { userId, serventiaId }, async () => {
-    const teste = await db.testeRestauracao.create({
-      data: {
+    const result = await runLogged('criarTesteRestauracao', { userId, serventiaId }, async () => {
+      const teste = await db.testeRestauracao.create({
+        data: {
+          serventiaId,
+          dataTeste: parsed.data.dataTeste,
+          sistemasRestaurados: parsed.data.sistemasRestaurados,
+          rtoDefinido: parsed.data.rtoDefinido,
+          rtoAferido: parsed.data.rtoAferido,
+          rpoDefinido: parsed.data.rpoDefinido,
+          rpoAferido: parsed.data.rpoAferido,
+          conformidade,
+          participantes: parsed.data.participantes,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          arquiteturaBackup: parsed.data.arquiteturaBackup as any,
+        },
+      })
+
+      await logAudit({
         serventiaId,
-        dataTeste: parsed.data.dataTeste,
-        sistemasRestaurados: parsed.data.sistemasRestaurados,
-        rtoDefinido: parsed.data.rtoDefinido,
-        rtoAferido: parsed.data.rtoAferido,
-        rpoDefinido: parsed.data.rpoDefinido,
-        rpoAferido: parsed.data.rpoAferido,
-        conformidade,
-        participantes: parsed.data.participantes,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        arquiteturaBackup: parsed.data.arquiteturaBackup as any,
-      },
+        userId,
+        acao: 'TESTE_RESTAURACAO_CRIADO',
+        entidade: 'TesteRestauracao',
+        entidadeId: teste.id,
+        valorNovo: { dataTeste: teste.dataTeste, conformidade: teste.conformidade },
+      })
+
+      return teste
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'TESTE_RESTAURACAO_CRIADO',
-      entidade: 'TesteRestauracao',
-      entidadeId: teste.id,
-      valorNovo: { dataTeste: teste.dataTeste, conformidade: teste.conformidade },
-    })
-
-    return teste
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/testes-restauracao')
-  return { success: true, id: result.value.id }
+    revalidatePath('/testes-restauracao')
+    return { success: true, id: result.value.id }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, action: 'criarTesteRestauracao' })
+    log.error({ err }, 'Falha inesperada ao criar teste de restauração')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 /** Anexo V, item 8 — registro das providências deliberadas para o plano corretivo */
@@ -118,29 +126,35 @@ export async function atualizarMedidasCorretivas(
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão para editar testes de restauração' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão para editar testes de restauração' }
 
-  const teste = await db.testeRestauracao.findFirst({ where: { id: testeId, serventiaId } })
-  if (!teste) return { error: 'Teste de restauração não encontrado' }
+    const teste = await db.testeRestauracao.findFirst({ where: { id: testeId, serventiaId } })
+    if (!teste) return { error: 'Teste de restauração não encontrado' }
 
-  const result = await runLogged('atualizarMedidasCorretivas', { userId, serventiaId, testeId }, async () => {
-    await db.testeRestauracao.update({
-      where: { id: testeId },
-      data: { medidasCorretivas },
+    const result = await runLogged('atualizarMedidasCorretivas', { userId, serventiaId, testeId }, async () => {
+      await db.testeRestauracao.update({
+        where: { id: testeId },
+        data: { medidasCorretivas },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'TESTE_RESTAURACAO_CRIADO', // reutiliza ação do módulo; valorNovo distingue a operação
+        entidade: 'TesteRestauracao',
+        entidadeId: testeId,
+        valorNovo: { operacao: 'MEDIDAS_CORRETIVAS_ATUALIZADAS', medidasCorretivas },
+      })
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'TESTE_RESTAURACAO_CRIADO', // reutiliza ação do módulo; valorNovo distingue a operação
-      entidade: 'TesteRestauracao',
-      entidadeId: testeId,
-      valorNovo: { operacao: 'MEDIDAS_CORRETIVAS_ATUALIZADAS', medidasCorretivas },
-    })
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/testes-restauracao')
-  return { success: true }
+    revalidatePath('/testes-restauracao')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, testeId, action: 'atualizarMedidasCorretivas' })
+    log.error({ err }, 'Falha inesperada ao atualizar medidas corretivas')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }

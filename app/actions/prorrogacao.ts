@@ -9,7 +9,7 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 import { TIPO_PRAZO_ETAPAS_1_2 } from '@/lib/prorrogacao'
-import { runLogged } from '@/lib/logger'
+import { runLogged, getLogger } from '@/lib/logger'
 
 const solicitarSchema = z
   .object({
@@ -41,65 +41,71 @@ export async function solicitarProrrogacao(serventiaId: string, formData: FormDa
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await requireServentiaMembro(userId, serventiaId)
-  if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
-    return { error: 'Apenas Titular ou Responsável Técnico podem solicitar prorrogação' }
-  }
-
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = solicitarSchema.safeParse(raw)
-  if (!parsed.success) {
-    return { error: parsed.error.issues.map((i) => i.message).join('; ') }
-  }
-
-  const fluxo = membro.serventia.classe === 'CLASSE_1' ? 'SIMPLIFICADO' : 'FORMAL'
-  if (fluxo === 'FORMAL' && !parsed.data.elementosProbatorios?.trim()) {
-    return {
-      error: 'Elementos probatórios (ex.: orçamentos) são obrigatórios para Classes 2 e 3 (Art. 21, §2º)',
+  try {
+    const membro = await requireServentiaMembro(userId, serventiaId)
+    if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
+      return { error: 'Apenas Titular ou Responsável Técnico podem solicitar prorrogação' }
     }
-  }
 
-  const jaConcedida = await db.prorrogacao.findFirst({
-    where: { serventiaId, tipoPrazo: TIPO_PRAZO_ETAPAS_1_2, status: 'DEFERIDA' },
-  })
-  if (jaConcedida) {
-    return { error: 'Já existe uma prorrogação concedida — o Art. 21 permite apenas uma única prorrogação' }
-  }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = solicitarSchema.safeParse(raw)
+    if (!parsed.success) {
+      return { error: parsed.error.issues.map((i) => i.message).join('; ') }
+    }
 
-  const pendente = await db.prorrogacao.findFirst({
-    where: { serventiaId, tipoPrazo: TIPO_PRAZO_ETAPAS_1_2, status: 'SOLICITADA' },
-  })
-  if (pendente) {
-    return { error: 'Já existe uma solicitação de prorrogação pendente de decisão' }
-  }
+    const fluxo = membro.serventia.classe === 'CLASSE_1' ? 'SIMPLIFICADO' : 'FORMAL'
+    if (fluxo === 'FORMAL' && !parsed.data.elementosProbatorios?.trim()) {
+      return {
+        error: 'Elementos probatórios (ex.: orçamentos) são obrigatórios para Classes 2 e 3 (Art. 21, §2º)',
+      }
+    }
 
-  const result = await runLogged('solicitarProrrogacao', { userId, serventiaId }, async () => {
-    const prorrogacao = await db.prorrogacao.create({
-      data: {
+    const jaConcedida = await db.prorrogacao.findFirst({
+      where: { serventiaId, tipoPrazo: TIPO_PRAZO_ETAPAS_1_2, status: 'DEFERIDA' },
+    })
+    if (jaConcedida) {
+      return { error: 'Já existe uma prorrogação concedida — o Art. 21 permite apenas uma única prorrogação' }
+    }
+
+    const pendente = await db.prorrogacao.findFirst({
+      where: { serventiaId, tipoPrazo: TIPO_PRAZO_ETAPAS_1_2, status: 'SOLICITADA' },
+    })
+    if (pendente) {
+      return { error: 'Já existe uma solicitação de prorrogação pendente de decisão' }
+    }
+
+    const result = await runLogged('solicitarProrrogacao', { userId, serventiaId }, async () => {
+      const prorrogacao = await db.prorrogacao.create({
+        data: {
+          serventiaId,
+          tipoPrazo: TIPO_PRAZO_ETAPAS_1_2,
+          dataOriginal: parsed.data.dataOriginal,
+          dataSolicitada: parsed.data.dataSolicitada,
+          fluxo,
+          justificativa: parsed.data.justificativa,
+          elementosProbatorios: parsed.data.elementosProbatorios,
+          solicitadoPor: session.user.name ?? session.user.email ?? '',
+        },
+      })
+
+      await logAudit({
         serventiaId,
-        tipoPrazo: TIPO_PRAZO_ETAPAS_1_2,
-        dataOriginal: parsed.data.dataOriginal,
-        dataSolicitada: parsed.data.dataSolicitada,
-        fluxo,
-        justificativa: parsed.data.justificativa,
-        elementosProbatorios: parsed.data.elementosProbatorios,
-        solicitadoPor: session.user.name ?? session.user.email ?? '',
-      },
+        userId,
+        acao: 'PRORROGACAO_SOLICITADA',
+        entidade: 'Prorrogacao',
+        entidadeId: prorrogacao.id,
+        valorNovo: { dataOriginal: parsed.data.dataOriginal, dataSolicitada: parsed.data.dataSolicitada, fluxo },
+      })
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'PRORROGACAO_SOLICITADA',
-      entidade: 'Prorrogacao',
-      entidadeId: prorrogacao.id,
-      valorNovo: { dataOriginal: parsed.data.dataOriginal, dataSolicitada: parsed.data.dataSolicitada, fluxo },
-    })
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/configuracoes')
-  return { success: true }
+    revalidatePath('/configuracoes')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, action: 'solicitarProrrogacao' })
+    log.error({ err }, 'Falha inesperada ao solicitar prorrogação')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 const decisaoSchema = z.object({
@@ -122,41 +128,47 @@ export async function decidirProrrogacao(
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await requireServentiaMembro(userId, serventiaId)
-  if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
-    return { error: 'Apenas Titular ou Responsável Técnico podem registrar a decisão' }
+  try {
+    const membro = await requireServentiaMembro(userId, serventiaId)
+    if (!membro || !['TITULAR', 'RESPONSAVEL_TECNICO'].includes(membro.papel)) {
+      return { error: 'Apenas Titular ou Responsável Técnico podem registrar a decisão' }
+    }
+
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = decisaoSchema.safeParse(raw)
+    if (!parsed.success) return { error: parsed.error.issues.map((i) => i.message).join('; ') }
+
+    const prorrogacao = await db.prorrogacao.findFirst({ where: { id: prorrogacaoId, serventiaId } })
+    if (!prorrogacao) return { error: 'Solicitação de prorrogação não encontrada' }
+    if (prorrogacao.status !== 'SOLICITADA') return { error: 'Esta solicitação já foi decidida' }
+
+    const result = await runLogged('decidirProrrogacao', { userId, serventiaId, prorrogacaoId }, async () => {
+      await db.prorrogacao.update({
+        where: { id: prorrogacaoId },
+        data: {
+          status: parsed.data.decisao,
+          decididoPor: parsed.data.decididoPor,
+          dataDecisao: new Date(),
+          observacoesDecisao: parsed.data.observacoesDecisao,
+        },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'PRORROGACAO_DECIDIDA',
+        entidade: 'Prorrogacao',
+        entidadeId: prorrogacaoId,
+        valorNovo: { decisao: parsed.data.decisao, decididoPor: parsed.data.decididoPor },
+      })
+    })
+    if (!result.ok) return { error: result.error }
+
+    revalidatePath('/configuracoes')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, prorrogacaoId, action: 'decidirProrrogacao' })
+    log.error({ err }, 'Falha inesperada ao decidir prorrogação')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
   }
-
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = decisaoSchema.safeParse(raw)
-  if (!parsed.success) return { error: parsed.error.issues.map((i) => i.message).join('; ') }
-
-  const prorrogacao = await db.prorrogacao.findFirst({ where: { id: prorrogacaoId, serventiaId } })
-  if (!prorrogacao) return { error: 'Solicitação de prorrogação não encontrada' }
-  if (prorrogacao.status !== 'SOLICITADA') return { error: 'Esta solicitação já foi decidida' }
-
-  const result = await runLogged('decidirProrrogacao', { userId, serventiaId, prorrogacaoId }, async () => {
-    await db.prorrogacao.update({
-      where: { id: prorrogacaoId },
-      data: {
-        status: parsed.data.decisao,
-        decididoPor: parsed.data.decididoPor,
-        dataDecisao: new Date(),
-        observacoesDecisao: parsed.data.observacoesDecisao,
-      },
-    })
-
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'PRORROGACAO_DECIDIDA',
-      entidade: 'Prorrogacao',
-      entidadeId: prorrogacaoId,
-      valorNovo: { decisao: parsed.data.decisao, decididoPor: parsed.data.decididoPor },
-    })
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/configuracoes')
-  return { success: true }
 }

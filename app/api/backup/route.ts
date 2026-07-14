@@ -28,8 +28,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  const backups = await listBackups(membro.serventiaId)
-  return NextResponse.json({ backups })
+  try {
+    const backups = await listBackups(membro.serventiaId)
+    return NextResponse.json({ backups })
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'listar_backups' })
+    log.error({ err }, 'Falha ao listar backups')
+    return NextResponse.json({ error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
+  }
 }
 
 /** POST /api/backup — Cria novo backup */

@@ -60,6 +60,13 @@ export const RATE_LIMIT_RULES = {
   authForgotPassword: { bucket: 'auth-forgot', limit: 3, windowMs: 15 * 60_000 },
   // Força bruta contra o token de redefinição de senha.
   authResetPassword: { bucket: 'auth-reset', limit: 3, windowMs: 15 * 60_000 },
+  // /api/auth/change-password exige a senha atual para confirmar a troca —
+  // é um oráculo de verificação de senha como o login, só que atrás de uma
+  // sessão já autenticada (ex.: sessão sequestrada/compartilhada tentando
+  // adivinhar a senha real do titular da conta). Limite um pouco mais
+  // generoso que o de login puro, já que aqui um usuário legítimo também
+  // pode errar a própria senha ocasionalmente.
+  authChangePassword: { bucket: 'auth-change-password', limit: 5, windowMs: 15 * 60_000 },
 } satisfies Record<string, RateLimitRule>
 
 // KEYS[1] = chave de bloqueio, KEYS[2] = chave de contagem
@@ -224,7 +231,10 @@ export async function checkRateLimit(
         resetAt: Date.now() + ttlMs,
       }
     } catch (err) {
-      logger.error({ err }, 'rate-limit: falha ao consultar Redis — aplicando fallback em memória')
+      logger.error(
+        { err, bucket: rule.bucket, identifier },
+        'rate-limit: falha ao consultar Redis — aplicando fallback em memória',
+      )
     }
   }
 

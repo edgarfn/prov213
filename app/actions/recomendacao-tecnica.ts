@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
-import { runLogged } from '@/lib/logger'
+import { runLogged, getLogger } from '@/lib/logger'
 import { optionalText, optionalId } from '@/lib/zod-form-helpers'
 import {
   proximoCodigoRecomendacao,
@@ -65,63 +65,69 @@ export async function criarRecomendacao(serventiaId: string, formData: FormData)
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão para registrar recomendações técnicas' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão para registrar recomendações técnicas' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa1Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa1Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  if (!(await validarMembroAtivo(parsed.data.responsavelTecnicoId, serventiaId))) {
-    return { error: 'Responsável técnico selecionado não pertence a esta serventia.' }
-  }
+    if (!(await validarMembroAtivo(parsed.data.responsavelTecnicoId, serventiaId))) {
+      return { error: 'Responsável técnico selecionado não pertence a esta serventia.' }
+    }
 
-  const result = await runLogged('criarRecomendacao', { userId, serventiaId }, async () => {
-    const serventia = await db.serventia.findUniqueOrThrow({ where: { id: serventiaId }, select: { cns: true } })
-    const ano = new Date().getFullYear()
+    const result = await runLogged('criarRecomendacao', { userId, serventiaId }, async () => {
+      const serventia = await db.serventia.findUniqueOrThrow({ where: { id: serventiaId }, select: { cns: true } })
+      const ano = new Date().getFullYear()
 
-    const recomendacao = await db.$transaction(async (tx) => {
-      const { codigo, sequencial } = await proximoCodigoRecomendacao(tx, serventiaId, serventia.cns, ano)
-      return tx.recomendacaoTecnica.create({
-        data: {
-          serventiaId,
-          codigo,
-          anoReferencia: ano,
-          sequencial,
-          prioridade: parsed.data.prioridade,
-          dataIdentificacao: parsed.data.dataIdentificacao,
-          prazoRecomendado: parsed.data.prazoRecomendado,
-          responsavelTecnicoId: parsed.data.responsavelTecnicoId,
-          recomendacao: {
-            situacaoAtual: parsed.data.situacaoAtual,
-            problemaDeficiencia: parsed.data.problemaDeficiencia,
-            requisitoRelacionado: parsed.data.requisitoRelacionado ?? null,
-            ativoAfetado: parsed.data.ativoAfetado ?? null,
-            riscoNaoImplementar: parsed.data.riscoNaoImplementar,
-            solucaoRecomendada: parsed.data.solucaoRecomendada,
-            alternativasPossiveis: parsed.data.alternativasPossiveis ?? null,
-            estimativaCusto: parsed.data.estimativaCusto ?? null,
-            evidenciasColetadasObs: parsed.data.evidenciasColetadasObs ?? null,
+      const recomendacao = await db.$transaction(async (tx) => {
+        const { codigo, sequencial } = await proximoCodigoRecomendacao(tx, serventiaId, serventia.cns, ano)
+        return tx.recomendacaoTecnica.create({
+          data: {
+            serventiaId,
+            codigo,
+            anoReferencia: ano,
+            sequencial,
+            prioridade: parsed.data.prioridade,
+            dataIdentificacao: parsed.data.dataIdentificacao,
+            prazoRecomendado: parsed.data.prazoRecomendado,
+            responsavelTecnicoId: parsed.data.responsavelTecnicoId,
+            recomendacao: {
+              situacaoAtual: parsed.data.situacaoAtual,
+              problemaDeficiencia: parsed.data.problemaDeficiencia,
+              requisitoRelacionado: parsed.data.requisitoRelacionado ?? null,
+              ativoAfetado: parsed.data.ativoAfetado ?? null,
+              riscoNaoImplementar: parsed.data.riscoNaoImplementar,
+              solucaoRecomendada: parsed.data.solucaoRecomendada,
+              alternativasPossiveis: parsed.data.alternativasPossiveis ?? null,
+              estimativaCusto: parsed.data.estimativaCusto ?? null,
+              evidenciasColetadasObs: parsed.data.evidenciasColetadasObs ?? null,
+            },
           },
-        },
+        })
       })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_CRIADA',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: recomendacao.id,
+        valorNovo: { codigo: recomendacao.codigo, prioridade: recomendacao.prioridade },
+      })
+
+      return recomendacao
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_CRIADA',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: recomendacao.id,
-      valorNovo: { codigo: recomendacao.codigo, prioridade: recomendacao.prioridade },
-    })
-
-    return recomendacao
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true, id: result.value.id, codigo: result.value.codigo }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true, id: result.value.id, codigo: result.value.codigo }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, action: 'criarRecomendacao' })
+    log.error({ err }, 'Falha inesperada ao criar recomendação técnica')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 2 — Análise de Risco e Conformidade (GOV-TI-02) ───────────────────
@@ -148,60 +154,66 @@ export async function registrarAnaliseRisco(serventiaId: string, recomendacaoId:
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa2Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa2Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'RASCUNHO' && anterior.status !== 'COMPLEMENTACAO_SOLICITADA') {
-    return { error: 'Esta recomendação não está numa etapa que permita registrar a análise de risco.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'RASCUNHO' && anterior.status !== 'COMPLEMENTACAO_SOLICITADA') {
+      return { error: 'Esta recomendação não está numa etapa que permita registrar a análise de risco.' }
+    }
 
-  const novoStatus = proximoStatusAposAnaliseRisco(parsed.data.envolveDadosPessoais)
+    const novoStatus = proximoStatusAposAnaliseRisco(parsed.data.envolveDadosPessoais)
 
-  const result = await runLogged('registrarAnaliseRisco', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        classificacaoRiscoFinal: parsed.data.classificacaoRiscoFinal,
-        envolveDadosPessoais: parsed.data.envolveDadosPessoais,
-        status: novoStatus,
-        analiseRisco: {
-          probabilidadeOcorrencia: parsed.data.probabilidadeOcorrencia,
-          impactoOperacional: parsed.data.impactoOperacional,
-          impactoDadosPessoais: parsed.data.impactoDadosPessoais ?? null,
-          impactoAcervoRegistral: parsed.data.impactoAcervoRegistral,
-          impactoFinanceiro: parsed.data.impactoFinanceiro ?? null,
-          impactoJuridicoCorrecional: parsed.data.impactoJuridicoCorrecional ?? null,
-          controlesExistentes: parsed.data.controlesExistentes ?? null,
-          controlesRecomendados: parsed.data.controlesRecomendados,
-          riscoResidualAposImplementacao: parsed.data.riscoResidualAposImplementacao,
-          consequenciaRejeicao: parsed.data.consequenciaRejeicao,
-          relacaoPcnPrd: parsed.data.relacaoPcnPrd ?? null,
-          relacaoRpoRto: parsed.data.relacaoRpoRto ?? null,
+    const result = await runLogged('registrarAnaliseRisco', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          classificacaoRiscoFinal: parsed.data.classificacaoRiscoFinal,
+          envolveDadosPessoais: parsed.data.envolveDadosPessoais,
+          status: novoStatus,
+          analiseRisco: {
+            probabilidadeOcorrencia: parsed.data.probabilidadeOcorrencia,
+            impactoOperacional: parsed.data.impactoOperacional,
+            impactoDadosPessoais: parsed.data.impactoDadosPessoais ?? null,
+            impactoAcervoRegistral: parsed.data.impactoAcervoRegistral,
+            impactoFinanceiro: parsed.data.impactoFinanceiro ?? null,
+            impactoJuridicoCorrecional: parsed.data.impactoJuridicoCorrecional ?? null,
+            controlesExistentes: parsed.data.controlesExistentes ?? null,
+            controlesRecomendados: parsed.data.controlesRecomendados,
+            riscoResidualAposImplementacao: parsed.data.riscoResidualAposImplementacao,
+            consequenciaRejeicao: parsed.data.consequenciaRejeicao,
+            relacaoPcnPrd: parsed.data.relacaoPcnPrd ?? null,
+            relacaoRpoRto: parsed.data.relacaoRpoRto ?? null,
+          },
         },
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_ANALISE_RISCO_REGISTRADA',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { classificacaoRiscoFinal: atualizado.classificacaoRiscoFinal, envolveDadosPessoais: atualizado.envolveDadosPessoais, status: atualizado.status },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_ANALISE_RISCO_REGISTRADA',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { classificacaoRiscoFinal: atualizado.classificacaoRiscoFinal, envolveDadosPessoais: atualizado.envolveDadosPessoais, status: atualizado.status },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'registrarAnaliseRisco' })
+    log.error({ err }, 'Falha inesperada ao registrar análise de risco')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 3 — Parecer de Privacidade e Proteção de Dados (GOV-TI-03) ────────
@@ -227,61 +239,67 @@ export async function registrarParecerDpo(serventiaId: string, recomendacaoId: s
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await requireServentiaMembro(userId, serventiaId)
-  if (!membro || membro.papel !== 'DPO') {
-    return { error: 'Apenas um membro com papel DPO pode registrar o parecer de privacidade.' }
-  }
+  try {
+    const membro = await requireServentiaMembro(userId, serventiaId)
+    if (!membro || membro.papel !== 'DPO') {
+      return { error: 'Apenas um membro com papel DPO pode registrar o parecer de privacidade.' }
+    }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa3Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa3Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'AGUARDANDO_PARECER_DPO') {
-    return { error: 'Esta recomendação não está aguardando parecer do DPO.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'AGUARDANDO_PARECER_DPO') {
+      return { error: 'Esta recomendação não está aguardando parecer do DPO.' }
+    }
 
-  const result = await runLogged('registrarParecerDpo', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        parecerDpoUserId: userId,
-        parecerDpoConcluidoEm: new Date(),
-        status: 'AGUARDANDO_DECISAO',
-        parecerDpo: {
-          necessidadeProporcionalidade: parsed.data.necessidadeProporcionalidade,
-          dadosSensiveisEnvolvidos: parsed.data.dadosSensiveisEnvolvidos ?? null,
-          novosFornecedores: parsed.data.novosFornecedores ?? null,
-          acessosRemotos: parsed.data.acessosRemotos ?? null,
-          armazenamentoNuvem: parsed.data.armazenamentoNuvem ?? null,
-          transferenciaInternacional: parsed.data.transferenciaInternacional ?? null,
-          logsMonitoramento: parsed.data.logsMonitoramento ?? null,
-          retencao: parsed.data.retencao ?? null,
-          contratosOperadores: parsed.data.contratosOperadores ?? null,
-          riscoTitulares: parsed.data.riscoTitulares,
-          necessidadeRipd: parsed.data.necessidadeRipd,
-          necessidadeAtualizarRopa: parsed.data.necessidadeAtualizarRopa,
-          conclusao: parsed.data.conclusao,
+    const result = await runLogged('registrarParecerDpo', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          parecerDpoUserId: userId,
+          parecerDpoConcluidoEm: new Date(),
+          status: 'AGUARDANDO_DECISAO',
+          parecerDpo: {
+            necessidadeProporcionalidade: parsed.data.necessidadeProporcionalidade,
+            dadosSensiveisEnvolvidos: parsed.data.dadosSensiveisEnvolvidos ?? null,
+            novosFornecedores: parsed.data.novosFornecedores ?? null,
+            acessosRemotos: parsed.data.acessosRemotos ?? null,
+            armazenamentoNuvem: parsed.data.armazenamentoNuvem ?? null,
+            transferenciaInternacional: parsed.data.transferenciaInternacional ?? null,
+            logsMonitoramento: parsed.data.logsMonitoramento ?? null,
+            retencao: parsed.data.retencao ?? null,
+            contratosOperadores: parsed.data.contratosOperadores ?? null,
+            riscoTitulares: parsed.data.riscoTitulares,
+            necessidadeRipd: parsed.data.necessidadeRipd,
+            necessidadeAtualizarRopa: parsed.data.necessidadeAtualizarRopa,
+            conclusao: parsed.data.conclusao,
+          },
         },
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_PARECER_DPO_REGISTRADO',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { necessidadeRipd: parsed.data.necessidadeRipd, necessidadeAtualizarRopa: parsed.data.necessidadeAtualizarRopa },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_PARECER_DPO_REGISTRADO',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { necessidadeRipd: parsed.data.necessidadeRipd, necessidadeAtualizarRopa: parsed.data.necessidadeAtualizarRopa },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'registrarParecerDpo' })
+    log.error({ err }, 'Falha inesperada ao registrar parecer do DPO')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 4 — Decisão formal do Controlador (GOV-TI-04 + GOV-TI-09) ─────────
@@ -313,86 +331,92 @@ export async function decidirRecomendacao(serventiaId: string, recomendacaoId: s
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await requireServentiaMembro(userId, serventiaId)
-  if (!membro || membro.papel !== 'TITULAR') {
-    return { error: 'Apenas o Titular (Controlador de Dados) pode registrar esta decisão.' }
-  }
+  try {
+    const membro = await requireServentiaMembro(userId, serventiaId)
+    if (!membro || membro.papel !== 'TITULAR') {
+      return { error: 'Apenas o Titular (Controlador de Dados) pode registrar esta decisão.' }
+    }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa4Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa4Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'AGUARDANDO_DECISAO') {
-    return { error: 'Esta recomendação não está aguardando decisão.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'AGUARDANDO_DECISAO') {
+      return { error: 'Esta recomendação não está aguardando decisão.' }
+    }
 
-  const precisaTermoCiencia = exigeTermoCiencia(parsed.data.decisao)
-  if (precisaTermoCiencia) {
-    if (!parsed.data.fundamentoTecnico || !parsed.data.consequenciasRejeicao || !parsed.data.motivoDeclarado) {
-      return {
-        error:
-          'Preencha o Termo de Ciência, Recusa e Aceitação Temporária de Risco (fundamento técnico, consequências e motivo declarado) antes de registrar esta decisão.',
+    const precisaTermoCiencia = exigeTermoCiencia(parsed.data.decisao)
+    if (precisaTermoCiencia) {
+      if (!parsed.data.fundamentoTecnico || !parsed.data.consequenciasRejeicao || !parsed.data.motivoDeclarado) {
+        return {
+          error:
+            'Preencha o Termo de Ciência, Recusa e Aceitação Temporária de Risco (fundamento técnico, consequências e motivo declarado) antes de registrar esta decisão.',
+        }
+      }
+      if (parsed.data.decisao === 'RISCO_ACEITO_TEMPORARIO' && !parsed.data.prazoReavaliacao) {
+        return { error: 'Informe o prazo de reavaliação para o risco aceito temporariamente.' }
       }
     }
-    if (parsed.data.decisao === 'RISCO_ACEITO_TEMPORARIO' && !parsed.data.prazoReavaliacao) {
-      return { error: 'Informe o prazo de reavaliação para o risco aceito temporariamente.' }
+
+    if (!(await validarMembroAtivo(parsed.data.responsavelExecucaoId, serventiaId))) {
+      return { error: 'Responsável pela execução selecionado não pertence a esta serventia.' }
     }
-  }
 
-  if (!(await validarMembroAtivo(parsed.data.responsavelExecucaoId, serventiaId))) {
-    return { error: 'Responsável pela execução selecionado não pertence a esta serventia.' }
-  }
+    const novoStatus = proximoStatusAposDecisao(parsed.data.decisao)
 
-  const novoStatus = proximoStatusAposDecisao(parsed.data.decisao)
-
-  const result = await runLogged('decidirRecomendacao', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        decisao: parsed.data.decisao,
-        decisaoControladorUserId: userId,
-        dataDecisao: new Date(),
-        valorAutorizado: parsed.data.valorAutorizado,
-        prazoImplantacao: parsed.data.prazoImplantacao,
-        responsavelExecucaoId: parsed.data.responsavelExecucaoId,
-        status: novoStatus,
-        decisaoDetalhes: {
-          fonteOrcamentaria: parsed.data.fonteOrcamentaria ?? null,
-          condicoesImpostas: parsed.data.condicoesImpostas ?? null,
-          riscoResidualConhecido: parsed.data.riscoResidualConhecido ?? null,
+    const result = await runLogged('decidirRecomendacao', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          decisao: parsed.data.decisao,
+          decisaoControladorUserId: userId,
+          dataDecisao: new Date(),
+          valorAutorizado: parsed.data.valorAutorizado,
+          prazoImplantacao: parsed.data.prazoImplantacao,
+          responsavelExecucaoId: parsed.data.responsavelExecucaoId,
+          status: novoStatus,
+          decisaoDetalhes: {
+            fonteOrcamentaria: parsed.data.fonteOrcamentaria ?? null,
+            condicoesImpostas: parsed.data.condicoesImpostas ?? null,
+            riscoResidualConhecido: parsed.data.riscoResidualConhecido ?? null,
+          },
+          ...(precisaTermoCiencia
+            ? {
+                prazoReavaliacao: parsed.data.prazoReavaliacao,
+                termoCiencia: {
+                  fundamentoTecnico: parsed.data.fundamentoTecnico,
+                  consequenciasRejeicao: parsed.data.consequenciasRejeicao,
+                  alternativasApresentadas: parsed.data.alternativasApresentadas ?? null,
+                  motivoDeclarado: parsed.data.motivoDeclarado,
+                  medidasCompensatorias: parsed.data.medidasCompensatorias ?? null,
+                },
+              }
+            : {}),
         },
-        ...(precisaTermoCiencia
-          ? {
-              prazoReavaliacao: parsed.data.prazoReavaliacao,
-              termoCiencia: {
-                fundamentoTecnico: parsed.data.fundamentoTecnico,
-                consequenciasRejeicao: parsed.data.consequenciasRejeicao,
-                alternativasApresentadas: parsed.data.alternativasApresentadas ?? null,
-                motivoDeclarado: parsed.data.motivoDeclarado,
-                medidasCompensatorias: parsed.data.medidasCompensatorias ?? null,
-              },
-            }
-          : {}),
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_DECIDIDA',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { decisao: atualizado.decisao, status: atualizado.status },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_DECIDIDA',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { decisao: atualizado.decisao, status: atualizado.status },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'decidirRecomendacao' })
+    log.error({ err }, 'Falha inesperada ao decidir recomendação técnica')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 5 — Ordem de Implementação/Mudança (GOV-TI-05) ────────────────────
@@ -417,58 +441,64 @@ export async function emitirOrdemImplementacao(serventiaId: string, recomendacao
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa5Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa5Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'APROVADO_AGUARDANDO_IMPLEMENTACAO') {
-    return { error: 'Esta recomendação não está aprovada e aguardando emissão da ordem de implementação.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'APROVADO_AGUARDANDO_IMPLEMENTACAO') {
+      return { error: 'Esta recomendação não está aprovada e aguardando emissão da ordem de implementação.' }
+    }
 
-  const result = await runLogged('emitirOrdemImplementacao', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        ordemEmitidaPorUserId: userId,
-        ordemEmitidaEm: new Date(),
-        dataExecucaoPlanejada: parsed.data.dataExecucaoPlanejada,
-        status: 'EM_IMPLEMENTACAO',
-        ordemImplementacao: {
-          escopoAprovado: parsed.data.escopoAprovado,
-          equipamentosServicos: parsed.data.equipamentosServicos ?? null,
-          responsaveis: parsed.data.responsaveis ?? null,
-          planoRollback: parsed.data.planoRollback,
-          riscosMudanca: parsed.data.riscosMudanca ?? null,
-          backupAnterior: parsed.data.backupAnterior ?? null,
-          criteriosSucesso: parsed.data.criteriosSucesso,
-          testesObrigatorios: parsed.data.testesObrigatorios ?? null,
-          indisponibilidadePrevista: parsed.data.indisponibilidadePrevista ?? null,
-          comunicacaoColaboradores: parsed.data.comunicacaoColaboradores ?? null,
-          autorizacaoAcessoPrivilegiado: parsed.data.autorizacaoAcessoPrivilegiado ?? null,
+    const result = await runLogged('emitirOrdemImplementacao', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          ordemEmitidaPorUserId: userId,
+          ordemEmitidaEm: new Date(),
+          dataExecucaoPlanejada: parsed.data.dataExecucaoPlanejada,
+          status: 'EM_IMPLEMENTACAO',
+          ordemImplementacao: {
+            escopoAprovado: parsed.data.escopoAprovado,
+            equipamentosServicos: parsed.data.equipamentosServicos ?? null,
+            responsaveis: parsed.data.responsaveis ?? null,
+            planoRollback: parsed.data.planoRollback,
+            riscosMudanca: parsed.data.riscosMudanca ?? null,
+            backupAnterior: parsed.data.backupAnterior ?? null,
+            criteriosSucesso: parsed.data.criteriosSucesso,
+            testesObrigatorios: parsed.data.testesObrigatorios ?? null,
+            indisponibilidadePrevista: parsed.data.indisponibilidadePrevista ?? null,
+            comunicacaoColaboradores: parsed.data.comunicacaoColaboradores ?? null,
+            autorizacaoAcessoPrivilegiado: parsed.data.autorizacaoAcessoPrivilegiado ?? null,
+          },
         },
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_ORDEM_IMPLEMENTACAO_EMITIDA',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { status: atualizado.status },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_ORDEM_IMPLEMENTACAO_EMITIDA',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { status: atualizado.status },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'emitirOrdemImplementacao' })
+    log.error({ err }, 'Falha inesperada ao emitir ordem de implementação')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 6 — Implementação e coleta de evidências (GOV-TI-06) ──────────────
@@ -489,52 +519,58 @@ export async function registrarExecucao(serventiaId: string, recomendacaoId: str
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa6Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa6Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'EM_IMPLEMENTACAO') {
-    return { error: 'Esta recomendação não está em implementação.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'EM_IMPLEMENTACAO') {
+      return { error: 'Esta recomendação não está em implementação.' }
+    }
 
-  const result = await runLogged('registrarExecucao', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        dataExecucaoRealizada: parsed.data.dataExecucaoRealizada ?? new Date(),
-        status: 'AGUARDANDO_ACEITE',
-        execucao: {
-          relatorioTecnico: parsed.data.relatorioTecnico,
-          configuracaoAnterior: parsed.data.configuracaoAnterior ?? null,
-          configuracaoPosterior: parsed.data.configuracaoPosterior ?? null,
-          usuariosExecutores: parsed.data.usuariosExecutores ?? null,
-          resultadosTestes: parsed.data.resultadosTestes ?? null,
-          falhas: parsed.data.falhas ?? null,
-          medidasCorretivas: parsed.data.medidasCorretivas ?? null,
+    const result = await runLogged('registrarExecucao', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          dataExecucaoRealizada: parsed.data.dataExecucaoRealizada ?? new Date(),
+          status: 'AGUARDANDO_ACEITE',
+          execucao: {
+            relatorioTecnico: parsed.data.relatorioTecnico,
+            configuracaoAnterior: parsed.data.configuracaoAnterior ?? null,
+            configuracaoPosterior: parsed.data.configuracaoPosterior ?? null,
+            usuariosExecutores: parsed.data.usuariosExecutores ?? null,
+            resultadosTestes: parsed.data.resultadosTestes ?? null,
+            falhas: parsed.data.falhas ?? null,
+            medidasCorretivas: parsed.data.medidasCorretivas ?? null,
+          },
         },
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_EXECUCAO_REGISTRADA',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { status: atualizado.status },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_EXECUCAO_REGISTRADA',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { status: atualizado.status },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'registrarExecucao' })
+    log.error({ err }, 'Falha inesperada ao registrar execução')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 7 — Teste e Aceite (GOV-TI-07) ────────────────────────────────────
@@ -554,59 +590,65 @@ export async function registrarAceite(serventiaId: string, recomendacaoId: strin
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa7Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa7Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'AGUARDANDO_ACEITE') {
-    return { error: 'Esta recomendação não está aguardando teste e aceite.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'AGUARDANDO_ACEITE') {
+      return { error: 'Esta recomendação não está aguardando teste e aceite.' }
+    }
 
-  if (!(await validarMembroAtivo(parsed.data.aceiteControladorUserId, serventiaId, 'TITULAR'))) {
-    return { error: 'O Controlador que assina o aceite precisa ser um membro ativo com papel Titular.' }
-  }
+    if (!(await validarMembroAtivo(parsed.data.aceiteControladorUserId, serventiaId, 'TITULAR'))) {
+      return { error: 'O Controlador que assina o aceite precisa ser um membro ativo com papel Titular.' }
+    }
 
-  const novoStatus = proximoStatusAposAceite(parsed.data.aceiteResultado)
+    const novoStatus = proximoStatusAposAceite(parsed.data.aceiteResultado)
 
-  const result = await runLogged('registrarAceite', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        aceiteResultado: parsed.data.aceiteResultado,
-        aceiteTecnicoUserId: userId,
-        aceiteControladorUserId: parsed.data.aceiteControladorUserId,
-        dataAceite: new Date(),
-        status: novoStatus,
-        aceite: {
-          requisitoAtendido: parsed.data.requisitoAtendido,
-          testesRealizados: parsed.data.testesRealizados,
-          resultadoObtido: parsed.data.resultadoObtido,
-          pendencias: parsed.data.pendencias ?? null,
-          riscoResidual: parsed.data.riscoResidual ?? null,
+    const result = await runLogged('registrarAceite', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          aceiteResultado: parsed.data.aceiteResultado,
+          aceiteTecnicoUserId: userId,
+          aceiteControladorUserId: parsed.data.aceiteControladorUserId,
+          dataAceite: new Date(),
+          status: novoStatus,
+          aceite: {
+            requisitoAtendido: parsed.data.requisitoAtendido,
+            testesRealizados: parsed.data.testesRealizados,
+            resultadoObtido: parsed.data.resultadoObtido,
+            pendencias: parsed.data.pendencias ?? null,
+            riscoResidual: parsed.data.riscoResidual ?? null,
+          },
         },
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_ACEITE_REGISTRADO',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { aceiteResultado: atualizado.aceiteResultado, status: atualizado.status },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_ACEITE_REGISTRADO',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { aceiteResultado: atualizado.aceiteResultado, status: atualizado.status },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'registrarAceite' })
+    log.error({ err }, 'Falha inesperada ao registrar aceite')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 // ─── Etapa 8 — Atualização dos documentos de governança (GOV-TI-10) ─────────
@@ -629,53 +671,59 @@ export async function registrarAtualizacaoDocumentos(serventiaId: string, recome
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = etapa8Schema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = etapa8Schema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
-  if (!anterior) return { error: 'Recomendação não encontrada' }
-  if (anterior.status !== 'AGUARDANDO_ATUALIZACAO_DOCUMENTOS') {
-    return { error: 'Esta recomendação não está aguardando atualização dos documentos de governança.' }
-  }
+    const anterior = await db.recomendacaoTecnica.findFirst({ where: { id: recomendacaoId, serventiaId } })
+    if (!anterior) return { error: 'Recomendação não encontrada' }
+    if (anterior.status !== 'AGUARDANDO_ATUALIZACAO_DOCUMENTOS') {
+      return { error: 'Esta recomendação não está aguardando atualização dos documentos de governança.' }
+    }
 
-  const result = await runLogged('registrarAtualizacaoDocumentos', { userId, serventiaId, recomendacaoId }, async () => {
-    const atualizado = await db.recomendacaoTecnica.update({
-      where: { id: recomendacaoId },
-      data: {
-        documentosAtualizadosEm: new Date(),
-        status: 'CONCLUIDO',
-        documentosAtualizados: {
-          inventarioAtivos: parsed.data.inventarioAtivos,
-          diagramaRede: parsed.data.diagramaRede,
-          pcn: parsed.data.pcn,
-          prd: parsed.data.prd,
-          psi: parsed.data.psi,
-          ropa: parsed.data.ropa,
-          matrizRiscos: parsed.data.matrizRiscos,
-          planoBackup: parsed.data.planoBackup,
-          dossieTecnico: parsed.data.dossieTecnico,
-          outros: parsed.data.outros ?? null,
+    const result = await runLogged('registrarAtualizacaoDocumentos', { userId, serventiaId, recomendacaoId }, async () => {
+      const atualizado = await db.recomendacaoTecnica.update({
+        where: { id: recomendacaoId },
+        data: {
+          documentosAtualizadosEm: new Date(),
+          status: 'CONCLUIDO',
+          documentosAtualizados: {
+            inventarioAtivos: parsed.data.inventarioAtivos,
+            diagramaRede: parsed.data.diagramaRede,
+            pcn: parsed.data.pcn,
+            prd: parsed.data.prd,
+            psi: parsed.data.psi,
+            ropa: parsed.data.ropa,
+            matrizRiscos: parsed.data.matrizRiscos,
+            planoBackup: parsed.data.planoBackup,
+            dossieTecnico: parsed.data.dossieTecnico,
+            outros: parsed.data.outros ?? null,
+          },
         },
-      },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'RECOMENDACAO_DOCUMENTOS_ATUALIZADOS',
+        entidade: 'RecomendacaoTecnica',
+        entidadeId: atualizado.id,
+        valorNovo: { status: atualizado.status },
+      })
+
+      return atualizado
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'RECOMENDACAO_DOCUMENTOS_ATUALIZADOS',
-      entidade: 'RecomendacaoTecnica',
-      entidadeId: atualizado.id,
-      valorNovo: { status: atualizado.status },
-    })
-
-    return atualizado
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/recomendacoes-tecnicas')
-  return { success: true }
+    revalidatePath('/recomendacoes-tecnicas')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, recomendacaoId, action: 'registrarAtualizacaoDocumentos' })
+    log.error({ err }, 'Falha inesperada ao registrar atualização de documentos de governança')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }

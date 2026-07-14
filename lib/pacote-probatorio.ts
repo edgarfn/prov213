@@ -9,6 +9,7 @@ import path from 'path'
 import JSZip from 'jszip'
 import { db } from '@/lib/db'
 import { calcularHashMestre, gerarHashListPdf, type EvidenciaHashItem } from '@/lib/pdf-hashlist'
+import { logger } from '@/lib/logger'
 
 const UPLOAD_BASE = path.join(process.cwd(), 'uploads')
 
@@ -107,9 +108,15 @@ export async function gerarPacoteProbatorio(
       const conteudo = await readFile(path.join(UPLOAD_BASE, e.storagePath))
       zip.file(`evidencias/etapa-${etapaNumero}/${codigo}/${e.nomeArquivo}`, conteudo)
       arquivosIncluidos++
-    } catch {
-      // Arquivo físico ausente (ex.: ambiente de teste) — mantém a referência no índice,
-      // sem interromper a geração do pacote.
+    } catch (err) {
+      // Arquivo físico ausente — mantém a referência no índice (hash preservado
+      // no dossiê) sem interromper a geração do pacote, mas isso é um sinal de
+      // integridade relevante o suficiente para alertar um operador: um arquivo
+      // de evidência referenciado por hash sumiu do disco.
+      logger.warn(
+        { err, serventiaId: opts.serventiaId, evidenciaId: e.id, storagePath: e.storagePath },
+        'Arquivo físico de evidência não encontrado ao gerar o pacote probatório — hash preservado, arquivo ausente',
+      )
       indiceLinhas.push(`  [ARQUIVO FÍSICO NÃO ENCONTRADO — hash preservado no dossiê]`)
     }
   }

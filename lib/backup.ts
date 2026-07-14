@@ -181,10 +181,15 @@ async function collectFiles(
       }
     }
   } catch (err) {
+    // ENOENT (diretório ainda não existe) é o caso normal — sem arquivos ainda.
+    // Qualquer outro erro (permissão negada, disco com problema, etc.) é uma
+    // falha real de infraestrutura — não pode ser engolida e disfarçada de
+    // "backup sem arquivos": isso produziria um dossiê probatório incompleto
+    // marcado como sucesso. Relança para que createBackup aborte por completo.
     if (!isEnoent(err)) {
-      logger.warn({ err, serventiaId }, 'Falha ao coletar arquivos de evidência para o backup')
+      logger.error({ err, serventiaId }, 'Falha ao coletar arquivos de evidência para o backup — abortando criação do backup')
+      throw new Error('Falha ao acessar os arquivos de evidência. O backup não foi criado para evitar um dossiê incompleto.')
     }
-    // ENOENT (diretório ainda não existe) é o caso normal — sem arquivos ainda
   }
 
   return files
@@ -304,10 +309,13 @@ export async function listBackups(serventiaId?: string): Promise<BackupManifest[
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
   } catch (err) {
-    if (!isEnoent(err)) {
-      logger.warn({ err, serventiaId }, 'Falha ao listar backups')
-    }
-    return []
+    // ENOENT (diretório ainda não existe) é o caso normal — nenhum backup
+    // criado ainda. Qualquer outro erro é relançado: uma lista vazia por
+    // falha real de leitura é indistinguível de "não há backups", o que
+    // esconderia do Titular que os backups existentes não puderam ser lidos.
+    if (isEnoent(err)) return []
+    logger.error({ err, serventiaId }, 'Falha ao listar backups')
+    throw new Error('Falha ao ler o diretório de backups.')
   }
 }
 

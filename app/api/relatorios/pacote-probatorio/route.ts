@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getValidatedMembro } from '@/lib/serventia-context'
 import { logAudit } from '@/lib/audit'
 import { gerarPacoteProbatorio } from '@/lib/pacote-probatorio'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
       responsavelEmail: session.user.email ?? '',
     })
   } catch (err) {
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'gerar_pacote_probatorio' })
+    log.error({ err }, 'Falha ao gerar o pacote probatório')
     const message = err instanceof Error ? err.message : 'Erro ao gerar o pacote probatório'
     return NextResponse.json({ error: message }, { status: 400 })
   }

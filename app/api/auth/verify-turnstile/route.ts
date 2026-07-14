@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyTurnstileToken } from '@/lib/turnstile'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -14,10 +15,16 @@ export async function POST(req: NextRequest) {
              req.headers.get('X-Forwarded-For')?.split(',')[0].trim() ??
              'unknown'
 
-  const success = await verifyTurnstileToken(token, ip)
-  if (!success) {
-    return NextResponse.json({ success: false }, { status: 422 })
-  }
+  try {
+    const success = await verifyTurnstileToken(token, ip)
+    if (!success) {
+      return NextResponse.json({ success: false }, { status: 422 })
+    }
 
-  return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    const log = await getLogger({ action: 'verify_turnstile' })
+    log.error({ err }, 'Falha inesperada ao verificar token Turnstile')
+    return NextResponse.json({ success: false, error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
+  }
 }

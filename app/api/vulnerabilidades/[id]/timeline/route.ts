@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { getValidatedMembro } from '@/lib/serventia-context'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -22,25 +23,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params
-  const vulnerabilidade = await db.vulnerabilidade.findFirst({ where: { id, serventiaId: membro.serventiaId } })
-  if (!vulnerabilidade) {
-    return NextResponse.json({ error: 'Vulnerabilidade não encontrada' }, { status: 404 })
+
+  try {
+    const vulnerabilidade = await db.vulnerabilidade.findFirst({ where: { id, serventiaId: membro.serventiaId } })
+    if (!vulnerabilidade) {
+      return NextResponse.json({ error: 'Vulnerabilidade não encontrada' }, { status: 404 })
+    }
+
+    const entradas = await db.auditLog.findMany({
+      where: { serventiaId: membro.serventiaId, entidade: 'Vulnerabilidade', entidadeId: id },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        acao: true,
+        userEmail: true,
+        userName: true,
+        valorAnterior: true,
+        valorNovo: true,
+        timestamp: true,
+      },
+    })
+
+    return NextResponse.json({ entradas })
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'timeline_vulnerabilidade' })
+    log.error({ err, vulnerabilidadeId: id }, 'Falha inesperada ao consultar timeline de vulnerabilidade')
+    return NextResponse.json({ error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
   }
-
-  const entradas = await db.auditLog.findMany({
-    where: { serventiaId: membro.serventiaId, entidade: 'Vulnerabilidade', entidadeId: id },
-    orderBy: { timestamp: 'desc' },
-    take: 50,
-    select: {
-      id: true,
-      acao: true,
-      userEmail: true,
-      userName: true,
-      valorAnterior: true,
-      valorNovo: true,
-      timestamp: true,
-    },
-  })
-
-  return NextResponse.json({ entradas })
 }

@@ -24,6 +24,7 @@ const isDev = process.env.NODE_ENV !== 'production'
 const REDACT_PATHS = [
   'password', '*.password',
   'passwordHash', '*.passwordHash',
+  'tempPassword', '*.tempPassword',
   'token', '*.token',
   'turnstileToken', '*.turnstileToken',
   'mfaSecret', '*.mfaSecret',
@@ -31,6 +32,12 @@ const REDACT_PATHS = [
   'passphrase', '*.passphrase',
   'sessionToken', '*.sessionToken',
   'resetToken', '*.resetToken',
+  // Código TOTP digitado pelo usuário na configuração/verificação de MFA —
+  // nomes de campo variam entre as chamadas (setupMFA/verifyAndEnableMFA
+  // usam `code`; bibliotecas de MFA costumam usar `otp`/`totp`).
+  'code', '*.code',
+  'otp', '*.otp',
+  'totp', '*.totp',
   'req.headers.authorization',
   'req.headers.cookie',
 ]
@@ -58,11 +65,15 @@ export const logger = pino({
 // Propositalmente NÃO inclui "hash"/"key" isolados: campos como
 // hashSha256/hashIntegridade são o núcleo probatório do dossiê e da cadeia
 // de auditoria deste sistema — mascará-los destruiria a evidência que a
-// norma exige manter verificável, sem proteger segredo nenhum.
+// norma exige manter verificável, sem proteger segredo nenhum. Pelo mesmo
+// motivo, também não inclui "code"/"otp" isolados: são curtos e genéricos
+// demais (colidiriam com campos legítimos como statusCode/requisitoCodigo);
+// o campo exato do TOTP digitado já é coberto de forma precisa (sem risco
+// de colisão) por REDACT_PATHS acima ('code'/'otp'/'totp').
 const SENSITIVE_KEY_FRAGMENTS = [
   'password', 'passwordhash', 'mfasecret', 'token', 'resettoken',
   'senha', 'secret', 'passphrase', 'sessiontoken', 'authorization',
-  'cookie', 'apikey', 'privatekey',
+  'cookie', 'apikey', 'privatekey', 'totp', 'cnpj',
 ]
 
 /**

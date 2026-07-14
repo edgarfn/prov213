@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { listUserServentias, SERVENTIA_COOKIE } from '@/lib/serventia-context'
 import { absoluteUrl } from '@/lib/utils'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -17,27 +18,33 @@ export async function GET() {
     return NextResponse.redirect(absoluteUrl('/login'))
   }
 
-  const membros = await listUserServentias(session.user.id)
+  try {
+    const membros = await listUserServentias(session.user.id)
 
-  if (membros.length === 0) {
-    return NextResponse.redirect(absoluteUrl('/onboarding'))
-  }
+    if (membros.length === 0) {
+      return NextResponse.redirect(absoluteUrl('/onboarding'))
+    }
 
-  if (membros.length > 1) {
+    if (membros.length > 1) {
+      return NextResponse.redirect(absoluteUrl('/selecionar-serventia'))
+    }
+
+    // Exatamente 1 serventia — auto-select
+    const serventiaId = membros[0].serventiaId
+    const res = NextResponse.redirect(absoluteUrl('/dashboard'))
+
+    res.cookies.set(SERVENTIA_COOKIE, serventiaId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+      secure: process.env.NODE_ENV === 'production',
+    })
+
+    return res
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, action: 'auto_select_serventia' })
+    log.error({ err }, 'Falha inesperada ao selecionar automaticamente a serventia')
     return NextResponse.redirect(absoluteUrl('/selecionar-serventia'))
   }
-
-  // Exatamente 1 serventia — auto-select
-  const serventiaId = membros[0].serventiaId
-  const res = NextResponse.redirect(absoluteUrl('/dashboard'))
-
-  res.cookies.set(SERVENTIA_COOKIE, serventiaId, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
-    secure: process.env.NODE_ENV === 'production',
-  })
-
-  return res
 }

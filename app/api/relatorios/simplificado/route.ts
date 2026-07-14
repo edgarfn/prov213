@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { getValidatedMembro } from '@/lib/serventia-context'
 import { logAudit } from '@/lib/audit'
 import { gerarRelatorioSimplificadoPdf, type RequisitoSimplificadoItem } from '@/lib/pdf-relatorio-simplificado'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -33,63 +34,69 @@ export async function GET(req: NextRequest) {
   const etapaId = req.nextUrl.searchParams.get('etapaId')
   if (!etapaId) return NextResponse.json({ error: 'Parâmetro etapaId é obrigatório' }, { status: 400 })
 
-  const etapa = await db.etapa.findUnique({ where: { id: etapaId } })
-  if (!etapa) return NextResponse.json({ error: 'Etapa não encontrada' }, { status: 404 })
+  try {
+    const etapa = await db.etapa.findUnique({ where: { id: etapaId } })
+    if (!etapa) return NextResponse.json({ error: 'Etapa não encontrada' }, { status: 404 })
 
-  const requisitos = await db.requisito.findMany({
-    where: { etapaId, classesAplicaveis: { has: 'CLASSE_1' } },
-    orderBy: { codigo: 'asc' },
-    include: {
-      progressos: {
-        where: { serventiaId: serventia.id },
-        include: { evidencias: { where: { deletedAt: null } } },
+    const requisitos = await db.requisito.findMany({
+      where: { etapaId, classesAplicaveis: { has: 'CLASSE_1' } },
+      orderBy: { codigo: 'asc' },
+      include: {
+        progressos: {
+          where: { serventiaId: serventia.id },
+          include: { evidencias: { where: { deletedAt: null } } },
+        },
       },
-    },
-  })
+    })
 
-  const geradoEm = new Date()
-  const itens: RequisitoSimplificadoItem[] = requisitos.map((r) => {
-    const progresso = r.progressos[0]
-    return {
-      codigo: r.codigo,
-      titulo: r.titulo,
-      descricaoNorma: r.descricaoNorma,
-      solucaoAdotada: progresso?.solucaoAdotada ?? null,
-      demonstracaoEquivalencia: progresso?.demonstracaoEquivalencia ?? null,
-      evidenciasNomes: progresso?.evidencias.map((e) => e.nomeArquivo) ?? [],
-      status: progresso?.status ?? 'NAO_INICIADO',
-    }
-  })
+    const geradoEm = new Date()
+    const itens: RequisitoSimplificadoItem[] = requisitos.map((r) => {
+      const progresso = r.progressos[0]
+      return {
+        codigo: r.codigo,
+        titulo: r.titulo,
+        descricaoNorma: r.descricaoNorma,
+        solucaoAdotada: progresso?.solucaoAdotada ?? null,
+        demonstracaoEquivalencia: progresso?.demonstracaoEquivalencia ?? null,
+        evidenciasNomes: progresso?.evidencias.map((e) => e.nomeArquivo) ?? [],
+        status: progresso?.status ?? 'NAO_INICIADO',
+      }
+    })
 
-  const pdfBytes = await gerarRelatorioSimplificadoPdf({
-    serventiaNome: serventia.nome,
-    serventiaCns: serventia.cns,
-    classe: serventia.classe,
-    etapaNumero: etapa.numero,
-    etapaTitulo: etapa.titulo,
-    requisitos: itens,
-    geradoEm,
-    responsavelNome: serventia.responsavelTecnico ?? session.user.name ?? session.user.email ?? '',
-  })
+    const pdfBytes = await gerarRelatorioSimplificadoPdf({
+      serventiaNome: serventia.nome,
+      serventiaCns: serventia.cns,
+      classe: serventia.classe,
+      etapaNumero: etapa.numero,
+      etapaTitulo: etapa.titulo,
+      requisitos: itens,
+      geradoEm,
+      responsavelNome: serventia.responsavelTecnico ?? session.user.name ?? session.user.email ?? '',
+    })
 
-  await logAudit({
-    serventiaId: membro.serventiaId,
-    userId: session.user.id,
-    acao: 'RELATORIO_GERADO',
-    entidade: 'Etapa',
-    entidadeId: etapa.id,
-    valorNovo: { tipo: 'RELATORIO_SIMPLIFICADO', etapaNumero: etapa.numero },
-    ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip'),
-    userAgent: req.headers.get('user-agent'),
-  })
+    await logAudit({
+      serventiaId: membro.serventiaId,
+      userId: session.user.id,
+      acao: 'RELATORIO_GERADO',
+      entidade: 'Etapa',
+      entidadeId: etapa.id,
+      valorNovo: { tipo: 'RELATORIO_SIMPLIFICADO', etapaNumero: etapa.numero },
+      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip'),
+      userAgent: req.headers.get('user-agent'),
+    })
 
-  return new NextResponse(new Uint8Array(pdfBytes), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="relatorio-simplificado-etapa${etapa.numero}-${geradoEm.toISOString().slice(0, 10)}.pdf"`,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'no-store, no-cache',
-    },
-  })
+    return new NextResponse(new Uint8Array(pdfBytes), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="relatorio-simplificado-etapa${etapa.numero}-${geradoEm.toISOString().slice(0, 10)}.pdf"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store, no-cache',
+      },
+    })
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'gerar_relatorio_simplificado' })
+    log.error({ err, etapaId }, 'Falha inesperada ao gerar relatório simplificado')
+    return NextResponse.json({ error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
+  }
 }

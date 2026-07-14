@@ -10,6 +10,7 @@ import {
   tooManyRequestsResponse,
   type RateLimitRule,
 } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 
 const SESSION_COOKIE_NAMES = ['next-auth.session-token', '__Secure-next-auth.session-token']
 
@@ -80,11 +81,12 @@ function nextWithRequestId(request: NextRequest, requestId: string) {
 // cada uma tem seu próprio bucket em lib/rate-limit.ts (RATE_LIMIT_RULES),
 // então esgotar a cota de uma não afeta as demais. Só POSTs contam: GETs
 // nessas rotas apenas renderizam a página/formulário.
-function matchSensitiveAuthRule(request: NextRequest): RateLimitRule | null {
+export function matchSensitiveAuthRule(request: NextRequest): RateLimitRule | null {
   if (request.method !== 'POST') return null
 
   switch (request.nextUrl.pathname) {
-    // Submissão de credenciais do NextAuth (login e verificação de MFA).
+    // Submissão de credenciais do NextAuth (login e verificação de MFA — o
+    // código TOTP é conferido dentro do mesmo authorize(), ver lib/auth.ts).
     case '/api/auth/callback/credentials':
       return RATE_LIMIT_RULES.authLogin
     // Auto-cadastro do primeiro administrador (Server Action — POST na própria página).
@@ -94,6 +96,10 @@ function matchSensitiveAuthRule(request: NextRequest): RateLimitRule | null {
       return RATE_LIMIT_RULES.authForgotPassword
     case '/api/auth/reset-password':
       return RATE_LIMIT_RULES.authResetPassword
+    // Exige a senha atual para confirmar a troca — mesmo risco de força
+    // bruta do login, mas atrás de uma sessão já autenticada.
+    case '/api/auth/change-password':
+      return RATE_LIMIT_RULES.authChangePassword
     default:
       return null
   }
@@ -151,7 +157,15 @@ export async function proxy(request: NextRequest) {
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
     secureCookie: process.env.NEXTAUTH_URL?.startsWith('https://') ?? false,
-  }).catch(() => null)
+  }).catch((err) => {
+    // null aqui também cobre o caso legítimo de "sem cookie de sessão" (já
+    // tratado acima em hasSession) — mas se getToken lançar de fato, é uma
+    // falha real de decodificação/verificação do JWT (segredo divergente,
+    // token corrompido/adulterado), que merece visibilidade operacional
+    // mesmo tratando o resultado como sessão expirada (fail closed).
+    logger.warn({ err, requestId }, 'Falha ao decodificar/verificar o token de sessão — tratando como sessão expirada')
+    return null
+  })
 
   const lastActivityAt = typeof token?.lastActivityAt === 'number' ? token.lastActivityAt : null
   const idleExpired = !token || lastActivityAt === null || Date.now() - lastActivityAt > IDLE_TIMEOUT_MS

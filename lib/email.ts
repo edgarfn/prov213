@@ -52,9 +52,13 @@ export async function sendPasswordResetEmail(
       )
       return
     }
-    // Fallback só de desenvolvimento: mostra o link para permitir testar o
-    // fluxo sem servidor SMTP local. Gate acima garante que nunca roda em produção.
-    logger.debug({ toEmail, link }, '[DEV] E-mail de redefinição de senha (sem SMTP configurado)')
+    // Fallback só de desenvolvimento (SMTP não configurado). Nunca inclui
+    // `link` no log — ele contém o token de reset em texto puro, e a única
+    // proteção contra isso seria o gate de NODE_ENV acima, que não é uma
+    // rede de segurança confiável (staging/homolog também caem aqui). Para
+    // testar o fluxo localmente sem SMTP, consulte o token diretamente na
+    // tabela PasswordResetToken (mesmo caminho já usado pelos testes e2e).
+    logger.debug({ toEmail }, '[DEV] E-mail de redefinição de senha não enviado (SMTP não configurado)')
     return
   }
 
@@ -98,7 +102,10 @@ export async function sendWelcomeEmail(
       )
       return
     }
-    logger.debug({ toEmail, tempPassword }, '[DEV] E-mail de boas-vindas (sem SMTP configurado)')
+    // Mesmo cuidado do reset de senha acima: nunca logar `tempPassword`,
+    // nem em dev — consulte a senha provisória diretamente no fluxo de
+    // criação de usuário (app/api/usuarios/route.ts) ao testar localmente.
+    logger.debug({ toEmail }, '[DEV] E-mail de boas-vindas não enviado (SMTP não configurado)')
     return
   }
 

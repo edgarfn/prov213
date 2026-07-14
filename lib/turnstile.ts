@@ -38,17 +38,19 @@ export async function verifyTurnstileToken(token: string, ip?: string): Promise<
     })
 
     if (!cfRes.ok) {
-      logger.error(
-        { status: cfRes.status, body: await cfRes.text() },
-        'Turnstile: siteverify retornou erro HTTP',
-      )
+      // Corpo truncado por precaução: é uma resposta de erro da própria
+      // Cloudflare (não contém o token do usuário), mas não há garantia
+      // contratual de tamanho/formato, então evitamos logar um payload
+      // arbitrariamente grande ou inesperado por completo.
+      const body = (await cfRes.text()).slice(0, 500)
+      logger.error({ status: cfRes.status, body, ip }, 'Turnstile: siteverify retornou erro HTTP')
       return false
     }
 
     const data: TurnstileVerifyResponse = await cfRes.json()
     if (!data.success) {
       logger.warn(
-        { errorCodes: data['error-codes'], hostname: data.hostname },
+        { errorCodes: data['error-codes'], hostname: data.hostname, ip },
         'Turnstile: siteverify falhou',
       )
       return false
@@ -56,7 +58,7 @@ export async function verifyTurnstileToken(token: string, ip?: string): Promise<
 
     return true
   } catch (err) {
-    logger.error({ err }, 'Turnstile: erro ao verificar token')
+    logger.error({ err, ip }, 'Turnstile: erro ao verificar token')
     return false
   }
 }

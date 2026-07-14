@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { listUserServentias } from '@/lib/serventia-context'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -12,12 +13,18 @@ export async function GET() {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  const membros = await listUserServentias(session.user.id)
+  try {
+    const membros = await listUserServentias(session.user.id)
 
-  return NextResponse.json({
-    serventias: membros.map((m) => ({
-      papel: m.papel,
-      serventia: m.serventia,
-    })),
-  })
+    return NextResponse.json({
+      serventias: membros.map((m) => ({
+        papel: m.papel,
+        serventia: m.serventia,
+      })),
+    })
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, action: 'listar_serventias_usuario' })
+    log.error({ err }, 'Falha inesperada ao listar serventias do usuário')
+    return NextResponse.json({ error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
+  }
 }

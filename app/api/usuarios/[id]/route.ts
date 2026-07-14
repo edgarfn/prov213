@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { getValidatedMembro } from '@/lib/serventia-context'
 import { logAudit } from '@/lib/audit'
+import { getLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -34,47 +35,53 @@ export async function DELETE(
     return NextResponse.json({ error: 'Não é possível excluir seu próprio acesso' }, { status: 400 })
   }
 
-  const alvo = await db.membroServentia.findUnique({
-    where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
-    include: { user: { select: { email: true } } },
-  })
-  if (!alvo) return NextResponse.json({ error: 'Usuário não encontrado nesta serventia' }, { status: 404 })
-  if (alvo.papel === 'TITULAR') {
-    return NextResponse.json({ error: 'Não é possível excluir o Titular' }, { status: 400 })
+  try {
+    const alvo = await db.membroServentia.findUnique({
+      where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
+      include: { user: { select: { email: true } } },
+    })
+    if (!alvo) return NextResponse.json({ error: 'Usuário não encontrado nesta serventia' }, { status: 404 })
+    if (alvo.papel === 'TITULAR') {
+      return NextResponse.json({ error: 'Não é possível excluir o Titular' }, { status: 400 })
+    }
+
+    const [auditCount, progressoCount, incidenteCount, vulnerabilidadeCount] = await Promise.all([
+      db.auditLog.count({ where: { userId, serventiaId: membro.serventiaId } }),
+      db.progressoRequisito.count({ where: { serventiaId: membro.serventiaId, responsavelId: userId } }),
+      db.incidente.count({ where: { serventiaId: membro.serventiaId, responsavelId: userId } }),
+      db.vulnerabilidade.count({ where: { serventiaId: membro.serventiaId, responsavelId: userId } }),
+    ])
+
+    if (auditCount > 0 || progressoCount > 0 || incidenteCount > 0 || vulnerabilidadeCount > 0) {
+      return NextResponse.json({
+        error:
+          'Não é possível excluir: este usuário possui histórico associado a esta serventia ' +
+          '(auditoria, progresso de checklist, incidentes ou vulnerabilidades). ' +
+          'Use "Desativar" para revogar o acesso mantendo o histórico.',
+      }, { status: 409 })
+    }
+
+    await db.membroServentia.delete({
+      where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
+    })
+
+    await logAudit({
+      serventiaId: membro.serventiaId,
+      userId: session.user.id,
+      acao: 'USUARIO_REMOVIDO',
+      entidade: 'MembroServentia',
+      entidadeId: userId,
+      valorAnterior: { email: alvo.user.email, papel: alvo.papel },
+      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip'),
+      userAgent: req.headers.get('user-agent'),
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'excluir_usuario' })
+    log.error({ err, alvoUserId: userId }, 'Falha inesperada ao excluir usuário')
+    return NextResponse.json({ error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
   }
-
-  const [auditCount, progressoCount, incidenteCount, vulnerabilidadeCount] = await Promise.all([
-    db.auditLog.count({ where: { userId, serventiaId: membro.serventiaId } }),
-    db.progressoRequisito.count({ where: { serventiaId: membro.serventiaId, responsavelId: userId } }),
-    db.incidente.count({ where: { serventiaId: membro.serventiaId, responsavelId: userId } }),
-    db.vulnerabilidade.count({ where: { serventiaId: membro.serventiaId, responsavelId: userId } }),
-  ])
-
-  if (auditCount > 0 || progressoCount > 0 || incidenteCount > 0 || vulnerabilidadeCount > 0) {
-    return NextResponse.json({
-      error:
-        'Não é possível excluir: este usuário possui histórico associado a esta serventia ' +
-        '(auditoria, progresso de checklist, incidentes ou vulnerabilidades). ' +
-        'Use "Desativar" para revogar o acesso mantendo o histórico.',
-    }, { status: 409 })
-  }
-
-  await db.membroServentia.delete({
-    where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
-  })
-
-  await logAudit({
-    serventiaId: membro.serventiaId,
-    userId: session.user.id,
-    acao: 'USUARIO_REMOVIDO',
-    entidade: 'MembroServentia',
-    entidadeId: userId,
-    valorAnterior: { email: alvo.user.email, papel: alvo.papel },
-    ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip'),
-    userAgent: req.headers.get('user-agent'),
-  })
-
-  return NextResponse.json({ success: true })
 }
 
 /** PATCH /api/usuarios/[id] — Altera papel, ativo (revogar/reativar acesso) e/ou nome/e-mail */
@@ -91,90 +98,97 @@ export async function PATCH(
   }
 
   const { id: userId } = await params
-  const body = (await req.json()) as { papel?: string; ativo?: boolean; name?: string; email?: string }
 
-  const alvo = await db.membroServentia.findUnique({
-    where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
-  })
-  if (!alvo) return NextResponse.json({ error: 'Usuário não encontrado nesta serventia' }, { status: 404 })
-  if (alvo.papel === 'TITULAR') {
-    return NextResponse.json({ error: 'Não é possível alterar o Titular' }, { status: 400 })
-  }
+  try {
+    const body = (await req.json()) as { papel?: string; ativo?: boolean; name?: string; email?: string }
 
-  if (body.papel !== undefined) {
-    const papeis = ['RESPONSAVEL_TECNICO', 'DPO', 'COLABORADOR', 'AUDITOR_LEITURA', 'GESTOR_REGIONAL']
-    if (!papeis.includes(body.papel)) {
-      return NextResponse.json({ error: 'Papel inválido' }, { status: 400 })
-    }
-
-    await db.membroServentia.update({
+    const alvo = await db.membroServentia.findUnique({
       where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
-      data: { papel: body.papel as never },
     })
-
-    await logAudit({
-      serventiaId: membro.serventiaId,
-      userId: session.user.id,
-      acao: 'PAPEL_ALTERADO',
-      entidade: 'MembroServentia',
-      entidadeId: userId,
-      valorAnterior: { papel: alvo.papel },
-      valorNovo: { papel: body.papel },
-    })
-  }
-
-  if (body.ativo !== undefined) {
-    if (userId === session.user.id && !body.ativo) {
-      return NextResponse.json({ error: 'Não é possível desativar seu próprio acesso' }, { status: 400 })
+    if (!alvo) return NextResponse.json({ error: 'Usuário não encontrado nesta serventia' }, { status: 404 })
+    if (alvo.papel === 'TITULAR') {
+      return NextResponse.json({ error: 'Não é possível alterar o Titular' }, { status: 400 })
     }
 
-    await db.membroServentia.update({
-      where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
-      data: { ativo: body.ativo },
-    })
-
-    await logAudit({
-      serventiaId: membro.serventiaId,
-      userId: session.user.id,
-      acao: body.ativo ? 'USUARIO_ATIVADO' : 'USUARIO_DESATIVADO',
-      entidade: 'MembroServentia',
-      entidadeId: userId,
-    })
-  }
-
-  if (body.name !== undefined || body.email !== undefined) {
-    const dataUser: { name?: string; email?: string } = {}
-
-    if (body.name !== undefined) {
-      if (!body.name.trim()) return NextResponse.json({ error: 'Nome não pode ficar vazio' }, { status: 400 })
-      dataUser.name = body.name.trim()
-    }
-
-    if (body.email !== undefined) {
-      const emailNorm = body.email.toLowerCase().trim()
-      if (!emailNorm) return NextResponse.json({ error: 'E-mail não pode ficar vazio' }, { status: 400 })
-
-      const existing = await db.user.findUnique({ where: { email: emailNorm } })
-      if (existing && existing.id !== userId) {
-        return NextResponse.json({ error: 'Já existe uma conta com este e-mail' }, { status: 409 })
+    if (body.papel !== undefined) {
+      const papeis = ['RESPONSAVEL_TECNICO', 'DPO', 'COLABORADOR', 'AUDITOR_LEITURA', 'GESTOR_REGIONAL']
+      if (!papeis.includes(body.papel)) {
+        return NextResponse.json({ error: 'Papel inválido' }, { status: 400 })
       }
-      dataUser.email = emailNorm
+
+      await db.membroServentia.update({
+        where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
+        data: { papel: body.papel as never },
+      })
+
+      await logAudit({
+        serventiaId: membro.serventiaId,
+        userId: session.user.id,
+        acao: 'PAPEL_ALTERADO',
+        entidade: 'MembroServentia',
+        entidadeId: userId,
+        valorAnterior: { papel: alvo.papel },
+        valorNovo: { papel: body.papel },
+      })
     }
 
-    const anterior = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } })
+    if (body.ativo !== undefined) {
+      if (userId === session.user.id && !body.ativo) {
+        return NextResponse.json({ error: 'Não é possível desativar seu próprio acesso' }, { status: 400 })
+      }
 
-    await db.user.update({ where: { id: userId }, data: dataUser })
+      await db.membroServentia.update({
+        where: { userId_serventiaId: { userId, serventiaId: membro.serventiaId } },
+        data: { ativo: body.ativo },
+      })
 
-    await logAudit({
-      serventiaId: membro.serventiaId,
-      userId: session.user.id,
-      acao: 'USUARIO_ATUALIZADO',
-      entidade: 'User',
-      entidadeId: userId,
-      valorAnterior: anterior ?? undefined,
-      valorNovo: dataUser,
-    })
+      await logAudit({
+        serventiaId: membro.serventiaId,
+        userId: session.user.id,
+        acao: body.ativo ? 'USUARIO_ATIVADO' : 'USUARIO_DESATIVADO',
+        entidade: 'MembroServentia',
+        entidadeId: userId,
+      })
+    }
+
+    if (body.name !== undefined || body.email !== undefined) {
+      const dataUser: { name?: string; email?: string } = {}
+
+      if (body.name !== undefined) {
+        if (!body.name.trim()) return NextResponse.json({ error: 'Nome não pode ficar vazio' }, { status: 400 })
+        dataUser.name = body.name.trim()
+      }
+
+      if (body.email !== undefined) {
+        const emailNorm = body.email.toLowerCase().trim()
+        if (!emailNorm) return NextResponse.json({ error: 'E-mail não pode ficar vazio' }, { status: 400 })
+
+        const existing = await db.user.findUnique({ where: { email: emailNorm } })
+        if (existing && existing.id !== userId) {
+          return NextResponse.json({ error: 'Já existe uma conta com este e-mail' }, { status: 409 })
+        }
+        dataUser.email = emailNorm
+      }
+
+      const anterior = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } })
+
+      await db.user.update({ where: { id: userId }, data: dataUser })
+
+      await logAudit({
+        serventiaId: membro.serventiaId,
+        userId: session.user.id,
+        acao: 'USUARIO_ATUALIZADO',
+        entidade: 'User',
+        entidadeId: userId,
+        valorAnterior: anterior ?? undefined,
+        valorNovo: dataUser,
+      })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'atualizar_usuario' })
+    log.error({ err, alvoUserId: userId }, 'Falha inesperada ao atualizar usuário')
+    return NextResponse.json({ error: 'Erro interno. Tente novamente em instantes.' }, { status: 500 })
   }
-
-  return NextResponse.json({ success: true })
 }

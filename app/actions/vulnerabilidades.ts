@@ -8,7 +8,7 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { requireServentiaMembro } from '@/lib/serventia-context'
 import { prazoVulnerabilidade } from '@/lib/business-rules'
-import { runLogged } from '@/lib/logger'
+import { runLogged, getLogger } from '@/lib/logger'
 import { optionalText, optionalId, clearableId, boolFromString } from '@/lib/zod-form-helpers'
 
 const CLASSIFICACOES = ['BAIXO', 'MEDIO', 'ALTO', 'CRITICO'] as const
@@ -67,39 +67,45 @@ export async function criarVulnerabilidade(serventiaId: string, formData: FormDa
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão para registrar vulnerabilidades' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão para registrar vulnerabilidades' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = vulnerabilidadeSchema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos.' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = vulnerabilidadeSchema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos.' }
 
-  if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
-    return { error: 'Responsável selecionado não pertence a esta serventia.' }
+    if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
+      return { error: 'Responsável selecionado não pertence a esta serventia.' }
+    }
+
+    const prazoLimite = prazoVulnerabilidade(parsed.data.dataIdentificacao, parsed.data.exploracaoAtiva)
+
+    const result = await runLogged('criarVulnerabilidade', { userId, serventiaId }, async () => {
+      const vulnerabilidade = await db.vulnerabilidade.create({
+        data: { serventiaId, ...parsed.data, prazoLimite },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: 'VULNERABILIDADE_CRIADA',
+        entidade: 'Vulnerabilidade',
+        entidadeId: vulnerabilidade.id,
+        valorNovo: { classificacaoRisco: vulnerabilidade.classificacaoRisco, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
+      })
+
+      return vulnerabilidade
+    })
+    if (!result.ok) return { error: result.error }
+
+    revalidatePath('/vulnerabilidades')
+    return { success: true, id: result.value.id }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, action: 'criarVulnerabilidade' })
+    log.error({ err }, 'Falha inesperada ao criar vulnerabilidade')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
   }
-
-  const prazoLimite = prazoVulnerabilidade(parsed.data.dataIdentificacao, parsed.data.exploracaoAtiva)
-
-  const result = await runLogged('criarVulnerabilidade', { userId, serventiaId }, async () => {
-    const vulnerabilidade = await db.vulnerabilidade.create({
-      data: { serventiaId, ...parsed.data, prazoLimite },
-    })
-
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: 'VULNERABILIDADE_CRIADA',
-      entidade: 'Vulnerabilidade',
-      entidadeId: vulnerabilidade.id,
-      valorNovo: { classificacaoRisco: vulnerabilidade.classificacaoRisco, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
-    })
-
-    return vulnerabilidade
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/vulnerabilidades')
-  return { success: true, id: result.value.id }
 }
 
 const atualizacaoSchema = z.object({
@@ -120,71 +126,77 @@ export async function atualizarVulnerabilidade(serventiaId: string, vulnerabilid
   if (!session?.user?.id) return { error: 'Não autorizado' }
   const userId = session.user.id
 
-  const membro = await garantirPodeEditar(userId, serventiaId)
-  if (!membro) return { error: 'Sem permissão' }
+  try {
+    const membro = await garantirPodeEditar(userId, serventiaId)
+    if (!membro) return { error: 'Sem permissão' }
 
-  const raw = Object.fromEntries(formData.entries())
-  const parsed = atualizacaoSchema.safeParse(raw)
-  if (!parsed.success) return { error: 'Dados inválidos' }
+    const raw = Object.fromEntries(formData.entries())
+    const parsed = atualizacaoSchema.safeParse(raw)
+    if (!parsed.success) return { error: 'Dados inválidos' }
 
-  const anterior = await db.vulnerabilidade.findFirst({ where: { id: vulnerabilidadeId, serventiaId } })
-  if (!anterior) return { error: 'Vulnerabilidade não encontrada' }
+    const anterior = await db.vulnerabilidade.findFirst({ where: { id: vulnerabilidadeId, serventiaId } })
+    if (!anterior) return { error: 'Vulnerabilidade não encontrada' }
 
-  if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
-    return { error: 'Responsável selecionado não pertence a esta serventia.' }
-  }
+    if (!(await validarResponsavel(parsed.data.responsavelId, serventiaId))) {
+      return { error: 'Responsável selecionado não pertence a esta serventia.' }
+    }
 
-  const novoStatus = parsed.data.status ?? anterior.status
-  const indoParaTerminal = STATUS_TERMINAIS.includes(novoStatus as (typeof STATUS_TERMINAIS)[number])
+    const novoStatus = parsed.data.status ?? anterior.status
+    const indoParaTerminal = STATUS_TERMINAIS.includes(novoStatus as (typeof STATUS_TERMINAIS)[number])
 
-  // Art. 11, §4º: providências devem estar registradas para encerramento formal.
-  if (indoParaTerminal && !(parsed.data.providencias ?? anterior.providencias)?.trim()) {
-    return { error: 'Registre as providências adotadas antes de encerrar (Art. 11, §4º).' }
-  }
+    // Art. 11, §4º: providências devem estar registradas para encerramento formal.
+    if (indoParaTerminal && !(parsed.data.providencias ?? anterior.providencias)?.trim()) {
+      return { error: 'Registre as providências adotadas antes de encerrar (Art. 11, §4º).' }
+    }
 
-  // Aceite formal de risco exige justificativa própria, distinta das providências
-  // (é uma decisão de não corrigir, não uma correção — precisa de registro específico).
-  if (novoStatus === 'RISCO_ACEITO' && !(parsed.data.justificativaRiscoAceito ?? anterior.justificativaRiscoAceito)?.trim()) {
-    return { error: 'Registre a justificativa do aceite de risco antes de encerrar com este status.' }
-  }
+    // Aceite formal de risco exige justificativa própria, distinta das providências
+    // (é uma decisão de não corrigir, não uma correção — precisa de registro específico).
+    if (novoStatus === 'RISCO_ACEITO' && !(parsed.data.justificativaRiscoAceito ?? anterior.justificativaRiscoAceito)?.trim()) {
+      return { error: 'Registre a justificativa do aceite de risco antes de encerrar com este status.' }
+    }
 
-  const exploracaoAtiva = parsed.data.exploracaoAtiva ?? anterior.exploracaoAtiva
-  const prazoLimite =
-    exploracaoAtiva !== anterior.exploracaoAtiva
-      ? prazoVulnerabilidade(anterior.dataIdentificacao, exploracaoAtiva)
-      : anterior.prazoLimite
+    const exploracaoAtiva = parsed.data.exploracaoAtiva ?? anterior.exploracaoAtiva
+    const prazoLimite =
+      exploracaoAtiva !== anterior.exploracaoAtiva
+        ? prazoVulnerabilidade(anterior.dataIdentificacao, exploracaoAtiva)
+        : anterior.prazoLimite
 
-  const result = await runLogged('atualizarVulnerabilidade', { userId, serventiaId, vulnerabilidadeId }, async () => {
-    const vulnerabilidade = await db.vulnerabilidade.update({
-      where: { id: vulnerabilidadeId },
-      data: {
-        status: novoStatus,
-        classificacaoRisco: parsed.data.classificacaoRisco ?? anterior.classificacaoRisco,
-        origem: parsed.data.origem ?? anterior.origem,
-        ativoAfetado: parsed.data.ativoAfetado ?? anterior.ativoAfetado,
-        cveReferencia: parsed.data.cveReferencia ?? anterior.cveReferencia,
-        cvssScore: parsed.data.cvssScore ?? anterior.cvssScore,
-        responsavelId: parsed.data.responsavelId !== undefined ? parsed.data.responsavelId : anterior.responsavelId,
-        exploracaoAtiva,
-        prazoLimite,
-        providencias: parsed.data.providencias ?? anterior.providencias,
-        justificativaRiscoAceito: parsed.data.justificativaRiscoAceito ?? anterior.justificativaRiscoAceito,
-        dataEncerramento: indoParaTerminal ? (anterior.dataEncerramento ?? new Date()) : null,
-      },
+    const result = await runLogged('atualizarVulnerabilidade', { userId, serventiaId, vulnerabilidadeId }, async () => {
+      const vulnerabilidade = await db.vulnerabilidade.update({
+        where: { id: vulnerabilidadeId },
+        data: {
+          status: novoStatus,
+          classificacaoRisco: parsed.data.classificacaoRisco ?? anterior.classificacaoRisco,
+          origem: parsed.data.origem ?? anterior.origem,
+          ativoAfetado: parsed.data.ativoAfetado ?? anterior.ativoAfetado,
+          cveReferencia: parsed.data.cveReferencia ?? anterior.cveReferencia,
+          cvssScore: parsed.data.cvssScore ?? anterior.cvssScore,
+          responsavelId: parsed.data.responsavelId !== undefined ? parsed.data.responsavelId : anterior.responsavelId,
+          exploracaoAtiva,
+          prazoLimite,
+          providencias: parsed.data.providencias ?? anterior.providencias,
+          justificativaRiscoAceito: parsed.data.justificativaRiscoAceito ?? anterior.justificativaRiscoAceito,
+          dataEncerramento: indoParaTerminal ? (anterior.dataEncerramento ?? new Date()) : null,
+        },
+      })
+
+      await logAudit({
+        serventiaId,
+        userId,
+        acao: indoParaTerminal ? 'VULNERABILIDADE_ENCERRADA' : 'VULNERABILIDADE_ATUALIZADA',
+        entidade: 'Vulnerabilidade',
+        entidadeId: vulnerabilidade.id,
+        valorAnterior: { status: anterior.status, exploracaoAtiva: anterior.exploracaoAtiva },
+        valorNovo: { status: vulnerabilidade.status, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
+      })
     })
+    if (!result.ok) return { error: result.error }
 
-    await logAudit({
-      serventiaId,
-      userId,
-      acao: indoParaTerminal ? 'VULNERABILIDADE_ENCERRADA' : 'VULNERABILIDADE_ATUALIZADA',
-      entidade: 'Vulnerabilidade',
-      entidadeId: vulnerabilidade.id,
-      valorAnterior: { status: anterior.status, exploracaoAtiva: anterior.exploracaoAtiva },
-      valorNovo: { status: vulnerabilidade.status, exploracaoAtiva: vulnerabilidade.exploracaoAtiva },
-    })
-  })
-  if (!result.ok) return { error: result.error }
-
-  revalidatePath('/vulnerabilidades')
-  return { success: true }
+    revalidatePath('/vulnerabilidades')
+    return { success: true }
+  } catch (err) {
+    const log = await getLogger({ userId, serventiaId, vulnerabilidadeId, action: 'atualizarVulnerabilidade' })
+    log.error({ err }, 'Falha inesperada ao atualizar vulnerabilidade')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }

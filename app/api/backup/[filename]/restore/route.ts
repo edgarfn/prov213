@@ -53,7 +53,11 @@ export async function POST(
     const msg = e instanceof Error ? e.message : 'Erro ao restaurar backup'
     const status = msg.includes('senha') || msg.includes('autenticação') ? 401 : 500
     const log = await getLogger({ userId: session.user.id, serventiaId: membro.serventiaId, action: 'restaurar_backup' })
-    log.error({ filename, err: e }, 'Falha ao restaurar backup')
+    if (status === 401) {
+      log.warn({ filename }, 'Tentativa de restauração de backup com frase-senha incorreta')
+    } else {
+      log.error({ filename, err: e }, 'Falha ao processar restauração de backup')
+    }
     return NextResponse.json({ error: msg }, { status })
   }
 }

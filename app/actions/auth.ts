@@ -110,27 +110,33 @@ export async function setupMFA() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { error: 'Não autorizado' }
 
-  const secret = generateSecret()
-  const otpauthUrl = generateURI({
-    issuer: 'Prov213 Compliance',
-    label: session.user.email ?? 'usuario',
-    secret,
-  })
+  try {
+    const secret = generateSecret()
+    const otpauthUrl = generateURI({
+      issuer: 'Prov213 Compliance',
+      label: session.user.email ?? 'usuario',
+      secret,
+    })
 
-  await db.user.update({
-    where: { id: session.user.id },
-    data: { mfaSecret: secret, mfaEnabled: false },
-  })
+    await db.user.update({
+      where: { id: session.user.id },
+      data: { mfaSecret: secret, mfaEnabled: false },
+    })
 
-  // Antes disto, a tela mostrava um ícone genérico no lugar do QR Code (não
-  // havia nenhuma biblioteca de geração de QR no projeto) — o usuário só
-  // conseguia configurar o app autenticador digitando a chave manualmente,
-  // e um erro de digitação nesse passo faz todo login com MFA falhar depois,
-  // mesmo com o código do app "certo". Gerar o PNG (data URL) aqui evita
-  // expor uma lib de QR no bundle do cliente.
-  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl)
+    // Antes disto, a tela mostrava um ícone genérico no lugar do QR Code (não
+    // havia nenhuma biblioteca de geração de QR no projeto) — o usuário só
+    // conseguia configurar o app autenticador digitando a chave manualmente,
+    // e um erro de digitação nesse passo faz todo login com MFA falhar depois,
+    // mesmo com o código do app "certo". Gerar o PNG (data URL) aqui evita
+    // expor uma lib de QR no bundle do cliente.
+    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl)
 
-  return { secret, otpauthUrl, qrCodeDataUrl }
+    return { secret, otpauthUrl, qrCodeDataUrl }
+  } catch (err) {
+    const log = await getLogger({ userId: session.user.id, action: 'setupMFA' })
+    log.error({ err }, 'Falha inesperada ao iniciar configuração de MFA')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
 
 export async function verifyAndEnableMFA(formData: FormData) {
@@ -140,18 +146,25 @@ export async function verifyAndEnableMFA(formData: FormData) {
   const code = formData.get('code') as string
   if (!code) return { error: 'Código obrigatório' }
 
-  const user = await db.user.findUnique({ where: { id: session.user.id } })
-  if (!user?.mfaSecret) return { error: 'Configuração de MFA não encontrada' }
+  try {
+    const user = await db.user.findUnique({ where: { id: session.user.id } })
+    if (!user?.mfaSecret) return { error: 'Configuração de MFA não encontrada' }
 
-  // epochTolerance: 30 — mesmo motivo do login em lib/auth.ts: sem isso,
-  // otplib v13 rejeita o código só pelo tempo de digitação/clock drift.
-  const result = verifySync({ token: code, secret: user.mfaSecret, epochTolerance: 30 })
-  if (!result?.valid) return { error: 'Código inválido. Tente novamente.' }
+    // epochTolerance: 30 — mesmo motivo do login em lib/auth.ts: sem isso,
+    // otplib v13 rejeita o código só pelo tempo de digitação/clock drift.
+    const result = verifySync({ token: code, secret: user.mfaSecret, epochTolerance: 30 })
+    if (!result?.valid) return { error: 'Código inválido. Tente novamente.' }
 
-  await db.user.update({
-    where: { id: session.user.id },
-    data: { mfaEnabled: true, mfaVerified: true },
-  })
+    await db.user.update({
+      where: { id: session.user.id },
+      data: { mfaEnabled: true, mfaVerified: true },
+    })
 
-  return { success: true }
+    return { success: true }
+  } catch (err) {
+    // Nunca incluir `code` (o TOTP digitado) no log — nem em caso de erro.
+    const log = await getLogger({ userId: session.user.id, action: 'verifyAndEnableMFA' })
+    log.error({ err }, 'Falha inesperada ao verificar e habilitar MFA')
+    return { error: 'Erro interno. Tente novamente em instantes.' }
+  }
 }
