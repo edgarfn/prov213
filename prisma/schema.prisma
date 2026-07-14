@@ -172,7 +172,6 @@ model User {
   progressos                  ProgressoRequisito[]
   incidentesResponsavel       Incidente[]
   vulnerabilidadesResponsavel Vulnerabilidade[]
-  ativosResponsavel           Ativo[]
   auditLogs                   AuditLog[]
   passwordResets              PasswordResetToken[]
 }
@@ -226,7 +225,6 @@ model Serventia {
   progressos        ProgressoRequisito[]
   incidentes        Incidente[]
   vulnerabilidades  Vulnerabilidade[]
-  ativos            Ativo[]
   testesRestauracao TesteRestauracao[]
   declaracoes       Declaracao[]
   auditLogs         AuditLog[]
@@ -398,12 +396,6 @@ model Vulnerabilidade {
   classificacaoRisco       ClassificacaoRisco
   status                   StatusVulnerabilidade @default(IDENTIFICADA)
   origem                   OrigemVulnerabilidade @default(OUTRO)
-  /// Vínculo estruturado com o Cadastro de Ativos (opcional — nem toda
-  /// vulnerabilidade afeta um ativo já catalogado, ex.: falha em serviço de
-  /// terceiro). Quando presente, prevalece sobre `ativoAfetado` na exibição.
-  ativoId                  String?
-  /// Texto livre mantido para ativos ainda não cadastrados ou observações
-  /// adicionais — não é substituído por `ativoId`, os dois convivem.
   ativoAfetado             String?
   /// Referência externa (ex.: CVE-2025-12345), quando aplicável
   cveReferencia            String?
@@ -420,81 +412,7 @@ model Vulnerabilidade {
   updatedAt                DateTime              @updatedAt
   serventia                Serventia             @relation(fields: [serventiaId], references: [id])
   responsavel              User?                 @relation(fields: [responsavelId], references: [id])
-  ativo                    Ativo?                @relation(fields: [ativoId], references: [id])
   evidencias               Evidencia[]
-
-  @@index([ativoId])
-}
-
-// ─── Cadastro de Ativos Tecnológicos ──────────────────────────────────────────
-// Anexo I; Anexo IV, Etapa 1, item 1.7 (Requisito 1.7 do seed) — "inventário
-// completo de ativos tecnológicos, integrações, bancos de dados, certificados
-// digitais, softwares, histórico de atualizações e contratos".
-
-/// Categorias literalmente citadas no item 1.7 do Anexo IV.
-enum TipoAtivo {
-  EQUIPAMENTO
-  SISTEMA_SOFTWARE
-  BANCO_DADOS
-  INTEGRACAO
-  CERTIFICADO_DIGITAL
-  CONTRATO_FORNECEDOR
-  OUTRO
-}
-
-/// Ciclo de vida do ativo — não normativo em si, mas apoia a evidência de
-/// gestão de ativos (equipamento/software fora do fim de vida útil é um
-/// risco de segurança recorrente em fiscalizações).
-enum StatusAtivo {
-  EM_AQUISICAO
-  ATIVO
-  EM_MANUTENCAO
-  DESCONTINUADO
-  BAIXADO
-}
-
-model Ativo {
-  id                    String             @id @default(cuid())
-  serventiaId           String
-  nome                  String
-  tipo                  TipoAtivo
-  /// Reaproveita a mesma escala de Vulnerabilidade.classificacaoRisco
-  /// (BAIXO/MEDIO/ALTO/CRITICO) — impacto se este ativo for comprometido ou
-  /// ficar indisponível.
-  criticidade           ClassificacaoRisco
-  status                StatusAtivo        @default(ATIVO)
-  fabricante            String?
-  modelo                String?
-  numeroSerie           String?
-  /// IP, hostname ou FQDN, quando aplicável (equipamentos e sistemas de rede)
-  identificadorRede     String?
-  localizacao           String?
-  /// Fornecedor/terceiro responsável, quando o ativo é contratado (ex.:
-  /// CONTRATO_FORNECEDOR, serviço em nuvem operado por terceiro)
-  fornecedor            String?
-  descricao             String?            @db.Text
-  /// LGPD — sinaliza ativos que armazenam ou processam dados pessoais,
-  /// relevante para o registro de operações de tratamento (Art. 6º, IV)
-  contemDadosPessoais   Boolean            @default(false)
-  versaoAtual           String?
-  dataUltimaAtualizacao DateTime?
-  dataAquisicao         DateTime?
-  dataEntradaProducao   DateTime?
-  /// Fim de vida útil / fim de suporte do fabricante / validade do
-  /// certificado — o que for aplicável ao tipo do ativo. Alimenta o alerta
-  /// de prazo em lib/alertas.ts (mesmo semáforo verde/amarelo/vermelho).
-  dataFimVidaUtil       DateTime?
-  dataBaixa             DateTime?
-  justificativaBaixa    String?            @db.Text
-  responsavelId         String?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  serventia             Serventia          @relation(fields: [serventiaId], references: [id])
-  responsavel           User?              @relation(fields: [responsavelId], references: [id])
-  vulnerabilidades      Vulnerabilidade[]
-
-  @@index([serventiaId, status])
-  @@index([serventiaId, dataFimVidaUtil])
 }
 
 // ─── Testes de Restauração ────────────────────────────────────────────────────

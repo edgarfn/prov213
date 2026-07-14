@@ -15,7 +15,6 @@ function baseInput(overrides: Partial<MontarAlertasInput> = {}): MontarAlertasIn
     ultimoTesteData: addDays(HOJE, -10), // testado recentemente
     testeRestauracaoMeses: 12,
     prorrogacaoPendente: false,
-    ativosComFimVidaUtil: [],
     ...overrides,
   }
 }
@@ -102,35 +101,6 @@ describe('montarAlertas', () => {
     )
     expect(alertas).toHaveLength(1)
     expect(alertas[0].tipo).toBe('TESTE_RESTAURACAO_ATRASADO')
-  })
-
-  it('Ativo com fim de vida útil confortável não gera alerta', () => {
-    const alertas = montarAlertas(
-      baseInput({
-        ativosComFimVidaUtil: [{ id: 'a-1', nome: 'Servidor de Arquivos', dataFimVidaUtil: addDays(HOJE, 90) }],
-      }),
-    )
-    expect(alertas).toHaveLength(0)
-  })
-
-  it('Ativo com fim de vida útil vencido gera alerta vermelho', () => {
-    const alertas = montarAlertas(
-      baseInput({
-        ativosComFimVidaUtil: [{ id: 'a-2', nome: 'Firewall antigo', dataFimVidaUtil: addDays(HOJE, -5) }],
-      }),
-    )
-    expect(alertas).toHaveLength(1)
-    expect(alertas[0]).toMatchObject({ tipo: 'ATIVO_FIM_VIDA_UTIL', severidade: 'vermelho', href: '/ativos' })
-  })
-
-  it('Ativo com fim de vida útil próximo (≤30 dias) gera alerta amarelo', () => {
-    const alertas = montarAlertas(
-      baseInput({
-        ativosComFimVidaUtil: [{ id: 'a-3', nome: 'Licença SGBD', dataFimVidaUtil: addDays(HOJE, 20) }],
-      }),
-    )
-    expect(alertas).toHaveLength(1)
-    expect(alertas[0]).toMatchObject({ tipo: 'ATIVO_FIM_VIDA_UTIL', severidade: 'amarelo' })
   })
 
   it('Prorrogação pendente de decisão gera alerta amarelo (Art. 21)', () => {

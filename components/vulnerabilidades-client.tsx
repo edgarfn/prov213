@@ -64,19 +64,12 @@ function selectLabel(map: Record<string, string>) {
 
 const FORM_INITIAL = {
   descricao: '', dataIdentificacao: '', classificacaoRisco: 'ALTO', origem: 'OUTRO',
-  ativoId: '_none', ativoAfetado: '', cveReferencia: '', cvssScore: '', responsavelId: '_none', exploracaoAtiva: false,
+  ativoAfetado: '', cveReferencia: '', cvssScore: '', responsavelId: '_none', exploracaoAtiva: false,
 }
 
 type VulnerabilidadeComRelacoes = Vulnerabilidade & {
   responsavel: { name: string | null; email: string } | null
-  ativo: { nome: string } | null
   evidencias: Evidencia[]
-}
-
-interface AtivoOpcao {
-  id: string
-  nome: string
-  status: string
 }
 
 interface TimelineEntry {
@@ -91,12 +84,11 @@ interface Props {
   serventiaId: string
   vulnerabilidades: VulnerabilidadeComRelacoes[]
   usuarios: { id: string; name: string | null; email: string }[]
-  ativos: AtivoOpcao[]
   papelAtual: RolePapel
   retencaoAnos: number
 }
 
-export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios, ativos, papelAtual, retencaoAnos }: Props) {
+export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios, papelAtual, retencaoAnos }: Props) {
   const [createOpen, setCreateOpen] = useState(false)
   const [selected, setSelected] = useState<VulnerabilidadeComRelacoes | null>(null)
   const [form, setForm] = useState(FORM_INITIAL)
@@ -112,7 +104,6 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
   const [status, setStatus] = useState('IDENTIFICADA')
   const [classificacaoRisco, setClassificacaoRisco] = useState('ALTO')
   const [origem, setOrigem] = useState('OUTRO')
-  const [ativoId, setAtivoId] = useState('_none')
   const [ativoAfetado, setAtivoAfetado] = useState('')
   const [cveReferencia, setCveReferencia] = useState('')
   const [cvssScore, setCvssScore] = useState('')
@@ -131,18 +122,11 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
     return u ? (u.name ?? u.email) : String(id)
   }
 
-  function ativoLabel(id: unknown) {
-    if (id === '_none' || !id) return 'Outro / não cadastrado'
-    const a = ativos.find((x) => x.id === id)
-    return a ? a.nome : String(id)
-  }
-
   function abrirDetalhe(v: VulnerabilidadeComRelacoes) {
     setSelected(v)
     setStatus(v.status)
     setClassificacaoRisco(v.classificacaoRisco)
     setOrigem(v.origem)
-    setAtivoId(v.ativoId ?? '_none')
     setAtivoAfetado(v.ativoAfetado ?? '')
     setCveReferencia(v.cveReferencia ?? '')
     setCvssScore(v.cvssScore?.toString() ?? '')
@@ -178,7 +162,6 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
     fd.append('status', status)
     fd.append('classificacaoRisco', classificacaoRisco)
     fd.append('origem', origem)
-    fd.append('ativoId', ativoId)
     fd.append('ativoAfetado', ativoAfetado)
     fd.append('cveReferencia', cveReferencia)
     fd.append('cvssScore', cvssScore)
@@ -188,7 +171,7 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
     fd.append('justificativaRiscoAceito', justificativaRiscoAceito)
     if (extra) Object.entries(extra).forEach(([k, v]) => fd.append(k, v))
     return fd
-  }, [status, classificacaoRisco, origem, ativoId, ativoAfetado, cveReferencia, cvssScore, responsavelId, exploracaoAtiva, providencias, justificativaRiscoAceito])
+  }, [status, classificacaoRisco, origem, ativoAfetado, cveReferencia, cvssScore, responsavelId, exploracaoAtiva, providencias, justificativaRiscoAceito])
 
   function handleSalvar() {
     if (!selected) return
@@ -347,8 +330,8 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                         <p className="text-xs text-muted-foreground">
                           Identificada em {format(v.dataIdentificacao, 'dd/MM/yyyy', { locale: ptBR })}
                         </p>
-                        {(v.ativo?.nome || v.ativoAfetado) && (
-                          <span className="text-xs text-muted-foreground">Ativo: {v.ativo?.nome ?? v.ativoAfetado}</span>
+                        {v.ativoAfetado && (
+                          <span className="text-xs text-muted-foreground">Ativo: {v.ativoAfetado}</span>
                         )}
                         {v.responsavel && (
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -437,21 +420,11 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
             </div>
             <div className="space-y-1.5">
               <Label>Ativo/sistema afetado</Label>
-              <Select value={form.ativoId} onValueChange={(v) => v && setForm((p) => ({ ...p, ativoId: v }))}>
-                <SelectTrigger><SelectValue>{ativoLabel}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Outro / não cadastrado</SelectItem>
-                  {ativos.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {form.ativoId === '_none' && (
-                <Input
-                  className="mt-1.5"
-                  placeholder="Ex.: Servidor de e-mail, Portal do cliente"
-                  value={form.ativoAfetado}
-                  onChange={(e) => setForm((p) => ({ ...p, ativoAfetado: e.target.value }))}
-                />
-              )}
+              <Input
+                placeholder="Ex.: Servidor de e-mail, Portal do cliente"
+                value={form.ativoAfetado}
+                onChange={(e) => setForm((p) => ({ ...p, ativoAfetado: e.target.value }))}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Responsável pela correção</Label>
@@ -563,16 +536,7 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Ativo/sistema afetado</Label>
-                  <Select value={ativoId} onValueChange={(v) => v && setAtivoId(v)} disabled={somenteLeitura}>
-                    <SelectTrigger className="text-sm"><SelectValue>{ativoLabel}</SelectValue></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">Outro / não cadastrado</SelectItem>
-                      {ativos.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {ativoId === '_none' && (
-                    <Input className="mt-1.5" value={ativoAfetado} onChange={(e) => setAtivoAfetado(e.target.value)} disabled={somenteLeitura} />
-                  )}
+                  <Input value={ativoAfetado} onChange={(e) => setAtivoAfetado(e.target.value)} disabled={somenteLeitura} />
                 </div>
 
                 <label className="flex items-center gap-2 text-sm">

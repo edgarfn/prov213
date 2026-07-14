@@ -14,24 +14,18 @@ export default async function VulnerabilidadesPage() {
   if (!membro) redirect('/selecionar-serventia')
   if (!membro.serventia.onboardingConcluido) redirect('/onboarding')
 
-  const [vulnerabilidades, usuarios, ativos] = await Promise.all([
+  const [vulnerabilidades, usuarios] = await Promise.all([
     db.vulnerabilidade.findMany({
       where: { serventiaId: membro.serventiaId },
       orderBy: { dataIdentificacao: 'desc' },
       include: {
         responsavel: { select: { name: true, email: true } },
-        ativo: { select: { nome: true } },
         evidencias: { where: { deletedAt: null } },
       },
     }),
     db.user.findMany({
       where: { membros: { some: { serventiaId: membro.serventiaId } } },
       select: { id: true, name: true, email: true },
-    }),
-    db.ativo.findMany({
-      where: { serventiaId: membro.serventiaId },
-      orderBy: { nome: 'asc' },
-      select: { id: true, nome: true, status: true },
     }),
   ])
 
@@ -40,7 +34,6 @@ export default async function VulnerabilidadesPage() {
       serventiaId={membro.serventiaId}
       vulnerabilidades={vulnerabilidades}
       usuarios={usuarios}
-      ativos={ativos}
       papelAtual={membro.papel}
       retencaoAnos={parametrosPorClasse(membro.serventia.classe).retencaoAnos}
     />
