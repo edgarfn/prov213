@@ -78,7 +78,7 @@ export function BackupDownloadModal({ backup, onClose }: BackupDownloadModalProp
 
   return (
     <Dialog open={!!backup} onOpenChange={(o) => !o && !loading && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />
@@ -149,6 +149,7 @@ export function BackupDownloadModal({ backup, onClose }: BackupDownloadModalProp
               Cancelar
             </Button>
             <Button
+              variant="brand"
               onClick={handleDownload}
               disabled={loading || (backup.encrypted && !passphrase)}
             >

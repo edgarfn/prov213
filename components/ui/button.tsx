@@ -9,6 +9,11 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // Cor de destaque para a ação principal de formulários (ex.: "Salvar",
+        // "Criar", "Confirmar") — distinta do "default" (neutro), para que o
+        // botão de submit se destaque claramente das ações secundárias.
+        brand:
+          "bg-brand text-brand-foreground shadow-sm hover:bg-brand/90 hover:shadow-md focus-visible:border-brand focus-visible:ring-brand/50",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

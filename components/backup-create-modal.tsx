@@ -87,7 +87,7 @@ export function BackupCreateModal({ open, onClose, onCreated }: BackupCreateModa
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Criar Backup</DialogTitle>
         </DialogHeader>
@@ -223,6 +223,7 @@ export function BackupCreateModal({ open, onClose, onCreated }: BackupCreateModa
               Cancelar
             </Button>
             <Button
+              variant="brand"
               onClick={handleCreate}
               disabled={loading || !passphraseOk}
             >

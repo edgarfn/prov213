@@ -386,94 +386,98 @@ export default function UsuariosPage() {
 
       {/* Modal de criação */}
       <Dialog open={createOpen} onOpenChange={(o) => !o && !creating && setCreateOpen(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar usuário</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="u-name">
-                Nome completo <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="u-name"
-                placeholder="Ex: Maria Silva"
-                value={form.name}
-                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="u-name">
+                  Nome completo <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="u-name"
+                  placeholder="Ex: Maria Silva"
+                  value={form.name}
+                  onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="u-email">
+                  E-mail <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="u-email"
+                  type="email"
+                  placeholder="usuario@cartorio.com.br"
+                  value={form.email}
+                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Uma senha provisória será gerada e enviada por e-mail.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="u-email">
-                E-mail <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="u-email"
-                type="email"
-                placeholder="usuario@cartorio.com.br"
-                value={form.email}
-                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">
-                Uma senha provisória será gerada e enviada por e-mail.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>
-                Serventia com acesso <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={form.serventiaId}
-                onValueChange={(v) => { if (v) setForm(p => ({ ...p, serventiaId: v })) }}
-              >
-                <SelectTrigger disabled={loadingServentias}>
-                  <SelectValue>
-                    {(id: string) => {
-                      if (!id) return loadingServentias ? 'Carregando…' : 'Selecione a serventia'
-                      const s = serventias.find((x) => x.serventia.id === id)
-                      return s ? s.serventia.nome : 'Selecione a serventia'
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {serventias.map((s) => (
-                    <SelectItem key={s.serventia.id} value={s.serventia.id}>
-                      {s.serventia.nome}
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {s.serventia.municipio}/{s.serventia.uf}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                O usuário terá acesso apenas à serventia selecionada.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>
-                Perfil de acesso <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={form.papel}
-                onValueChange={(v) => { if (v) setForm(p => ({ ...p, papel: v })) }}
-              >
-                <SelectTrigger><SelectValue>{(v: string) => PAPEL_LABEL[v] ?? v}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PAPEL_LABEL)
-                    .filter(([k]) => k !== 'TITULAR')
-                    .map(([k, v]) => (
-                      <SelectItem key={k} value={k}>
-                        {v}
-                        {k === 'AUDITOR_LEITURA' && ' — só visualiza'}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>
+                  Serventia com acesso <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.serventiaId}
+                  onValueChange={(v) => { if (v) setForm(p => ({ ...p, serventiaId: v })) }}
+                >
+                  <SelectTrigger disabled={loadingServentias}>
+                    <SelectValue>
+                      {(id: string) => {
+                        if (!id) return loadingServentias ? 'Carregando…' : 'Selecione a serventia'
+                        const s = serventias.find((x) => x.serventia.id === id)
+                        return s ? s.serventia.nome : 'Selecione a serventia'
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {serventias.map((s) => (
+                      <SelectItem key={s.serventia.id} value={s.serventia.id}>
+                        {s.serventia.nome}
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {s.serventia.municipio}/{s.serventia.uf}
+                        </span>
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  O usuário terá acesso apenas à serventia selecionada.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>
+                  Perfil de acesso <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.papel}
+                  onValueChange={(v) => { if (v) setForm(p => ({ ...p, papel: v })) }}
+                >
+                  <SelectTrigger><SelectValue>{(v: string) => PAPEL_LABEL[v] ?? v}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAPEL_LABEL)
+                      .filter(([k]) => k !== 'TITULAR')
+                      .map(([k, v]) => (
+                        <SelectItem key={k} value={k}>
+                          {v}
+                          {k === 'AUDITOR_LEITURA' && ' — só visualiza'}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
@@ -487,6 +491,7 @@ export default function UsuariosPage() {
               </Button>
               <Button
                 type="submit"
+                variant="brand"
                 disabled={
                   creating ||
                   !form.name.trim() ||
@@ -505,28 +510,30 @@ export default function UsuariosPage() {
 
       {/* Modal de edição de nome/e-mail */}
       <Dialog open={!!editando} onOpenChange={(o) => !o && !editSaving && setEditando(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar usuário</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSalvarEdicao} className="space-y-4">
             {editError && <Alert variant="destructive"><AlertDescription>{editError}</AlertDescription></Alert>}
-            <div className="space-y-1.5">
-              <Label htmlFor="e-name">Nome completo</Label>
-              <Input id="e-name" value={editNome} onChange={(e) => setEditNome(e.target.value)} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="e-email">E-mail</Label>
-              <Input id="e-email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
-              <p className="text-xs text-muted-foreground">
-                Alterar o e-mail muda o login usado por esse usuário para entrar no sistema.
-              </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="e-name">Nome completo</Label>
+                <Input id="e-name" value={editNome} onChange={(e) => setEditNome(e.target.value)} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="e-email">E-mail</Label>
+                <Input id="e-email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
+                <p className="text-xs text-muted-foreground">
+                  Alterar o e-mail muda o login usado por esse usuário para entrar no sistema.
+                </p>
+              </div>
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <Button type="button" variant="outline" onClick={() => setEditando(null)} disabled={editSaving}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={editSaving || !editNome.trim() || !editEmail.trim()}>
+              <Button type="submit" variant="brand" disabled={editSaving || !editNome.trim() || !editEmail.trim()}>
                 {editSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Salvar
               </Button>

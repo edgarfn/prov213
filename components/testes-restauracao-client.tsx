@@ -197,7 +197,7 @@ export function TestesRestauracaoClient({
                             />
                             <Button
                               size="sm"
-                              variant="outline"
+                              variant="brand"
                               disabled={salvandoMedidas === t.id}
                               onClick={() => salvarMedidas(t.id)}
                             >
@@ -229,25 +229,25 @@ export function TestesRestauracaoClient({
       )}
 
       <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Registrar teste de restauração</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-            <div className="space-y-1.5">
-              <Label>Data do teste *</Label>
-              <Input type="datetime-local" value={form.dataTeste} onChange={(e) => setForm((p) => ({ ...p, dataTeste: e.target.value }))} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Sistemas/bases restaurados *</Label>
-              <Input
-                placeholder="Ex.: Sistema de escrituras, Banco de dados principal"
-                value={form.sistemasRestaurados}
-                onChange={(e) => setForm((p) => ({ ...p, sistemasRestaurados: e.target.value }))}
-                required
-              />
-              <p className="text-xs text-muted-foreground">Separe por vírgula.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Data do teste *</Label>
+                <Input type="datetime-local" value={form.dataTeste} onChange={(e) => setForm((p) => ({ ...p, dataTeste: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Sistemas/bases restaurados *</Label>
+                <Input
+                  placeholder="Ex.: Sistema de escrituras, Banco de dados principal"
+                  value={form.sistemasRestaurados}
+                  onChange={(e) => setForm((p) => ({ ...p, sistemasRestaurados: e.target.value }))}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Separe por vírgula.</p>
+              </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
                   RTO aferido (horas) *
@@ -287,7 +287,7 @@ export function TestesRestauracaoClient({
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isPending}>Registrar</Button>
+              <Button type="submit" variant="brand" disabled={isPending}>Registrar</Button>
             </div>
           </form>
         </DialogContent>

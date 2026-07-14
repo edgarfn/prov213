@@ -217,11 +217,11 @@ export function RecomendacoesTecnicasClient({ serventiaId, recomendacoes, membro
 
       {/* Criar */}
       <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Nova Recomendação Técnica</DialogTitle></DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-3">
+          <form onSubmit={handleCreate} className="space-y-4">
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Data de identificação *</Label>
                 <Input type="date" value={form.dataIdentificacao} onChange={(e) => setForm((p) => ({ ...p, dataIdentificacao: e.target.value }))} required />
@@ -231,7 +231,7 @@ export function RecomendacoesTecnicasClient({ serventiaId, recomendacoes, membro
                 <Input type="date" value={form.prazoRecomendado} onChange={(e) => setForm((p) => ({ ...p, prazoRecomendado: e.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Prioridade *</Label>
                 <Select value={form.prioridade} onValueChange={(v) => v && setForm((p) => ({ ...p, prioridade: v }))}>
@@ -285,7 +285,7 @@ export function RecomendacoesTecnicasClient({ serventiaId, recomendacoes, membro
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isPending || !form.responsavelTecnicoId}>Registrar</Button>
+              <Button type="submit" variant="brand" disabled={isPending || !form.responsavelTecnicoId}>Registrar</Button>
             </div>
           </form>
         </DialogContent>
@@ -293,7 +293,7 @@ export function RecomendacoesTecnicasClient({ serventiaId, recomendacoes, membro
 
       {/* Detalhe */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           {selected && (
             <RecomendacaoTecnicaDetalhe
               serventiaId={serventiaId}

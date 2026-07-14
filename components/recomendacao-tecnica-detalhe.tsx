@@ -418,7 +418,7 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
           <CampoLeitura label="Alternativas possíveis" value={dados1.alternativasPossiveis} />
           <CampoLeitura label="Estimativa de custo" value={dados1.estimativaCusto} />
           <CampoLeitura label="Observações sobre evidências coletadas" value={dados1.evidenciasColetadasObs} />
-          <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
+          <div className="grid grid-cols-1 gap-3 pt-2 text-sm sm:grid-cols-3">
             <div><p className="text-xs text-muted-foreground">Data de identificação</p>{fmtDate(r.dataIdentificacao)}</div>
             <div><p className="text-xs text-muted-foreground">Prazo recomendado</p>{fmtDate(r.prazoRecomendado)}</div>
             <div><p className="text-xs text-muted-foreground">Responsável técnico</p>{r.responsavelTecnico?.name ?? r.responsavelTecnico?.email}</div>
@@ -430,7 +430,7 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
           {!etapa2Editable && !dados2 ? (
             <AbaBloqueada motivo="Aguardando o preenchimento da Etapa 1." />
           ) : etapa2Editable ? (
-            <form onSubmit={submitEtapa2} className="space-y-3">
+            <form onSubmit={submitEtapa2} className="space-y-4">
               <div className="space-y-1.5">
                 <Label>Classificação de risco final *</Label>
                 <Select value={f2.classificacaoRiscoFinal} onValueChange={(v) => v && setF2((p) => ({ ...p, classificacaoRiscoFinal: v }))}>
@@ -439,36 +439,38 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
                 </Select>
               </div>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={f2.envolveDadosPessoais} onChange={(e) => setF2((p) => ({ ...p, envolveDadosPessoais: e.target.checked }))} />
+                <input type="checkbox" className="h-4 w-4 rounded border-input accent-brand" checked={f2.envolveDadosPessoais} onChange={(e) => setF2((p) => ({ ...p, envolveDadosPessoais: e.target.checked }))} />
                 Esta mudança envolve dados pessoais (exige Parecer do DPO)
                 <InfoTooltip chave="ANALISE_RISCO_CONFORMIDADE" />
               </label>
-              {(
-                [
-                  ['probabilidadeOcorrencia', 'Probabilidade de ocorrência *'],
-                  ['impactoOperacional', 'Impacto operacional *'],
-                  ['impactoDadosPessoais', 'Impacto sobre dados pessoais'],
-                  ['impactoAcervoRegistral', 'Impacto sobre o acervo registral *'],
-                  ['impactoFinanceiro', 'Impacto financeiro'],
-                  ['impactoJuridicoCorrecional', 'Impacto jurídico e correicional'],
-                  ['controlesExistentes', 'Controles existentes'],
-                  ['controlesRecomendados', 'Controles recomendados *'],
-                  ['riscoResidualAposImplementacao', 'Risco residual após implementação *'],
-                  ['consequenciaRejeicao', 'Consequência da rejeição *'],
-                  ['relacaoPcnPrd', 'Relação com o PCN/PRD'],
-                  ['relacaoRpoRto', 'Relação com o RPO/RTO'],
-                ] as Array<[keyof typeof f2, string]>
-              ).map(([key, label]) => (
-                <div className="space-y-1.5" key={key}>
-                  <Label>{label}</Label>
-                  <Textarea
-                    rows={2}
-                    value={String(f2[key])}
-                    onChange={(e) => setF2((p) => ({ ...p, [key]: e.target.value }))}
-                  />
-                </div>
-              ))}
-              <div className="flex justify-end"><Button type="submit" disabled={isPending}>Salvar e enviar</Button></div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ['probabilidadeOcorrencia', 'Probabilidade de ocorrência *'],
+                    ['impactoOperacional', 'Impacto operacional *'],
+                    ['impactoDadosPessoais', 'Impacto sobre dados pessoais'],
+                    ['impactoAcervoRegistral', 'Impacto sobre o acervo registral *'],
+                    ['impactoFinanceiro', 'Impacto financeiro'],
+                    ['impactoJuridicoCorrecional', 'Impacto jurídico e correicional'],
+                    ['controlesExistentes', 'Controles existentes'],
+                    ['controlesRecomendados', 'Controles recomendados *'],
+                    ['riscoResidualAposImplementacao', 'Risco residual após implementação *'],
+                    ['consequenciaRejeicao', 'Consequência da rejeição *'],
+                    ['relacaoPcnPrd', 'Relação com o PCN/PRD'],
+                    ['relacaoRpoRto', 'Relação com o RPO/RTO'],
+                  ] as Array<[keyof typeof f2, string]>
+                ).map(([key, label]) => (
+                  <div className="space-y-1.5" key={key}>
+                    <Label>{label}</Label>
+                    <Textarea
+                      rows={2}
+                      value={String(f2[key])}
+                      onChange={(e) => setF2((p) => ({ ...p, [key]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Salvar e enviar</Button></div>
             </form>
           ) : dados2 ? (
             <>
@@ -496,39 +498,41 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
               <Alert><AlertDescription>Nenhum membro com papel DPO está designado nesta serventia. Designe um em Configurações → Usuários antes de registrar o parecer (Requisito 1.1).</AlertDescription></Alert>
             )}
             {etapa3Editable ? (
-              <form onSubmit={submitEtapa3} className="space-y-3">
-                {(
-                  [
-                    ['necessidadeProporcionalidade', 'Necessidade e proporcionalidade *'],
-                    ['dadosSensiveisEnvolvidos', 'Dados sensíveis envolvidos'],
-                    ['novosFornecedores', 'Novos fornecedores'],
-                    ['acessosRemotos', 'Acessos remotos'],
-                    ['armazenamentoNuvem', 'Armazenamento em nuvem'],
-                    ['transferenciaInternacional', 'Transferência internacional'],
-                    ['logsMonitoramento', 'Logs e monitoramento'],
-                    ['retencao', 'Retenção de dados'],
-                    ['contratosOperadores', 'Contratos com operadores e suboperadores'],
-                    ['riscoTitulares', 'Risco aos direitos dos titulares *'],
-                  ] as Array<[keyof typeof f3, string]>
-                ).map(([key, label]) => (
-                  <div className="space-y-1.5" key={key}>
-                    <Label>{label}</Label>
-                    <Textarea rows={2} value={String(f3[key])} onChange={(e) => setF3((p) => ({ ...p, [key]: e.target.value }))} />
-                  </div>
-                ))}
+              <form onSubmit={submitEtapa3} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {(
+                    [
+                      ['necessidadeProporcionalidade', 'Necessidade e proporcionalidade *'],
+                      ['dadosSensiveisEnvolvidos', 'Dados sensíveis envolvidos'],
+                      ['novosFornecedores', 'Novos fornecedores'],
+                      ['acessosRemotos', 'Acessos remotos'],
+                      ['armazenamentoNuvem', 'Armazenamento em nuvem'],
+                      ['transferenciaInternacional', 'Transferência internacional'],
+                      ['logsMonitoramento', 'Logs e monitoramento'],
+                      ['retencao', 'Retenção de dados'],
+                      ['contratosOperadores', 'Contratos com operadores e suboperadores'],
+                      ['riscoTitulares', 'Risco aos direitos dos titulares *'],
+                    ] as Array<[keyof typeof f3, string]>
+                  ).map(([key, label]) => (
+                    <div className="space-y-1.5" key={key}>
+                      <Label>{label}</Label>
+                      <Textarea rows={2} value={String(f3[key])} onChange={(e) => setF3((p) => ({ ...p, [key]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={f3.necessidadeRipd} onChange={(e) => setF3((p) => ({ ...p, necessidadeRipd: e.target.checked }))} />
+                  <input type="checkbox" className="h-4 w-4 rounded border-input accent-brand" checked={f3.necessidadeRipd} onChange={(e) => setF3((p) => ({ ...p, necessidadeRipd: e.target.checked }))} />
                   Necessidade de RIPD (Relatório de Impacto)
                 </label>
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={f3.necessidadeAtualizarRopa} onChange={(e) => setF3((p) => ({ ...p, necessidadeAtualizarRopa: e.target.checked }))} />
+                  <input type="checkbox" className="h-4 w-4 rounded border-input accent-brand" checked={f3.necessidadeAtualizarRopa} onChange={(e) => setF3((p) => ({ ...p, necessidadeAtualizarRopa: e.target.checked }))} />
                   Necessidade de atualizar o ROPA
                 </label>
                 <div className="space-y-1.5">
                   <Label>Conclusão do parecer *</Label>
                   <Textarea rows={3} value={f3.conclusao} onChange={(e) => setF3((p) => ({ ...p, conclusao: e.target.value }))} />
                 </div>
-                <div className="flex justify-end"><Button type="submit" disabled={isPending}>Registrar parecer</Button></div>
+                <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Registrar parecer</Button></div>
               </form>
             ) : dados3 ? (
               <>
@@ -555,7 +559,7 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
         {/* Etapa 4 — Decisão do Controlador */}
         <TabsContent value="etapa4" className="space-y-3 pt-3">
           {etapa4Editable ? (
-            <form onSubmit={submitEtapa4} className="space-y-3">
+            <form onSubmit={submitEtapa4} className="space-y-4">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">Decisão *<InfoTooltip chave="DECISAO_CONTROLADOR" /></Label>
                 <Select value={f4.decisao} onValueChange={(v) => v && setF4((p) => ({ ...p, decisao: v as typeof p.decisao }))}>
@@ -563,41 +567,47 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
                   <SelectContent>{Object.entries(DECISAO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label>Valor autorizado (R$)</Label><Input type="number" step="0.01" value={f4.valorAutorizado} onChange={(e) => setF4((p) => ({ ...p, valorAutorizado: e.target.value }))} /></div>
                 <div className="space-y-1.5"><Label>Prazo de implantação</Label><Input type="date" value={f4.prazoImplantacao} onChange={(e) => setF4((p) => ({ ...p, prazoImplantacao: e.target.value }))} /></div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Responsável pela execução</Label>
-                <Select value={f4.responsavelExecucaoId} onValueChange={(v) => v && setF4((p) => ({ ...p, responsavelExecucaoId: v }))}>
-                  <SelectTrigger><SelectValue>{(v: unknown) => (v === '_none' ? 'Não atribuído' : membros.find((m) => m.id === v)?.name ?? String(v))}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Não atribuído</SelectItem>
-                    {membros.map((m) => <SelectItem key={m.id} value={m.id}>{m.name ?? m.email}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Responsável pela execução</Label>
+                  <Select value={f4.responsavelExecucaoId} onValueChange={(v) => v && setF4((p) => ({ ...p, responsavelExecucaoId: v }))}>
+                    <SelectTrigger><SelectValue>{(v: unknown) => (v === '_none' ? 'Não atribuído' : membros.find((m) => m.id === v)?.name ?? String(v))}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Não atribuído</SelectItem>
+                      {membros.map((m) => <SelectItem key={m.id} value={m.id}>{m.name ?? m.email}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5"><Label>Fonte orçamentária</Label><Input value={f4.fonteOrcamentaria} onChange={(e) => setF4((p) => ({ ...p, fonteOrcamentaria: e.target.value }))} /></div>
               </div>
-              <div className="space-y-1.5"><Label>Fonte orçamentária</Label><Input value={f4.fonteOrcamentaria} onChange={(e) => setF4((p) => ({ ...p, fonteOrcamentaria: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label>Condições impostas</Label><Textarea rows={2} value={f4.condicoesImpostas} onChange={(e) => setF4((p) => ({ ...p, condicoesImpostas: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label>Risco residual conhecido</Label><Textarea rows={2} value={f4.riscoResidualConhecido} onChange={(e) => setF4((p) => ({ ...p, riscoResidualConhecido: e.target.value }))} /></div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><Label>Condições impostas</Label><Textarea rows={2} value={f4.condicoesImpostas} onChange={(e) => setF4((p) => ({ ...p, condicoesImpostas: e.target.value }))} /></div>
+                <div className="space-y-1.5"><Label>Risco residual conhecido</Label><Textarea rows={2} value={f4.riscoResidualConhecido} onChange={(e) => setF4((p) => ({ ...p, riscoResidualConhecido: e.target.value }))} /></div>
+              </div>
 
               {precisaTermo && (
-                <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
                   <p className="text-sm font-medium flex items-center gap-1.5">
                     Termo de Ciência, Recusa e Aceitação Temporária de Risco
                     <InfoTooltip chave="TERMO_CIENCIA_RISCO" />
                   </p>
-                  <div className="space-y-1.5"><Label>Fundamento técnico *</Label><Textarea rows={2} value={f4.fundamentoTecnico} onChange={(e) => setF4((p) => ({ ...p, fundamentoTecnico: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Consequências da rejeição *</Label><Textarea rows={2} value={f4.consequenciasRejeicao} onChange={(e) => setF4((p) => ({ ...p, consequenciasRejeicao: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Alternativas apresentadas</Label><Textarea rows={2} value={f4.alternativasApresentadas} onChange={(e) => setF4((p) => ({ ...p, alternativasApresentadas: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Motivo declarado *</Label><Textarea rows={2} value={f4.motivoDeclarado} onChange={(e) => setF4((p) => ({ ...p, motivoDeclarado: e.target.value }))} /></div>
-                  <div className="space-y-1.5"><Label>Medidas compensatórias</Label><Textarea rows={2} value={f4.medidasCompensatorias} onChange={(e) => setF4((p) => ({ ...p, medidasCompensatorias: e.target.value }))} /></div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5"><Label>Fundamento técnico *</Label><Textarea rows={2} value={f4.fundamentoTecnico} onChange={(e) => setF4((p) => ({ ...p, fundamentoTecnico: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Consequências da rejeição *</Label><Textarea rows={2} value={f4.consequenciasRejeicao} onChange={(e) => setF4((p) => ({ ...p, consequenciasRejeicao: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Alternativas apresentadas</Label><Textarea rows={2} value={f4.alternativasApresentadas} onChange={(e) => setF4((p) => ({ ...p, alternativasApresentadas: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Motivo declarado *</Label><Textarea rows={2} value={f4.motivoDeclarado} onChange={(e) => setF4((p) => ({ ...p, motivoDeclarado: e.target.value }))} /></div>
+                    <div className="space-y-1.5 sm:col-span-2"><Label>Medidas compensatórias</Label><Textarea rows={2} value={f4.medidasCompensatorias} onChange={(e) => setF4((p) => ({ ...p, medidasCompensatorias: e.target.value }))} /></div>
+                  </div>
                   {f4.decisao === 'RISCO_ACEITO_TEMPORARIO' && (
                     <div className="space-y-1.5"><Label>Prazo de reavaliação *</Label><Input type="date" value={f4.prazoReavaliacao} onChange={(e) => setF4((p) => ({ ...p, prazoReavaliacao: e.target.value }))} /></div>
                   )}
                 </div>
               )}
-              <div className="flex justify-end"><Button type="submit" disabled={isPending}>Registrar decisão</Button></div>
+              <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Registrar decisão</Button></div>
             </form>
           ) : r.decisao ? (
             <>
@@ -622,29 +632,31 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
         {/* Etapa 5 — Ordem de Implementação */}
         <TabsContent value="etapa5" className="space-y-3 pt-3">
           {etapa5Editable ? (
-            <form onSubmit={submitEtapa5} className="space-y-3">
-              <div className="space-y-1.5"><Label>Data de execução planejada</Label><Input type="date" value={f5.dataExecucaoPlanejada} onChange={(e) => setF5((p) => ({ ...p, dataExecucaoPlanejada: e.target.value }))} /></div>
-              {(
-                [
-                  ['escopoAprovado', 'Escopo aprovado *'],
-                  ['equipamentosServicos', 'Equipamentos e serviços envolvidos'],
-                  ['responsaveis', 'Responsáveis'],
-                  ['planoRollback', 'Plano de rollback *'],
-                  ['riscosMudanca', 'Riscos da mudança'],
-                  ['backupAnterior', 'Backup anterior à alteração'],
-                  ['criteriosSucesso', 'Critérios de sucesso *'],
-                  ['testesObrigatorios', 'Testes obrigatórios'],
-                  ['indisponibilidadePrevista', 'Indisponibilidade prevista'],
-                  ['comunicacaoColaboradores', 'Comunicação aos colaboradores'],
-                  ['autorizacaoAcessoPrivilegiado', 'Autorização de acesso privilegiado'],
-                ] as Array<[keyof typeof f5, string]>
-              ).map(([key, label]) => (
-                <div className="space-y-1.5" key={key}>
-                  <Label>{label}</Label>
-                  <Textarea rows={2} value={String(f5[key])} onChange={(e) => setF5((p) => ({ ...p, [key]: e.target.value }))} />
-                </div>
-              ))}
-              <div className="flex justify-end"><Button type="submit" disabled={isPending}>Emitir ordem de implementação</Button></div>
+            <form onSubmit={submitEtapa5} className="space-y-4">
+              <div className="space-y-1.5 sm:w-1/2 sm:pr-2"><Label>Data de execução planejada</Label><Input type="date" value={f5.dataExecucaoPlanejada} onChange={(e) => setF5((p) => ({ ...p, dataExecucaoPlanejada: e.target.value }))} /></div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ['escopoAprovado', 'Escopo aprovado *'],
+                    ['equipamentosServicos', 'Equipamentos e serviços envolvidos'],
+                    ['responsaveis', 'Responsáveis'],
+                    ['planoRollback', 'Plano de rollback *'],
+                    ['riscosMudanca', 'Riscos da mudança'],
+                    ['backupAnterior', 'Backup anterior à alteração'],
+                    ['criteriosSucesso', 'Critérios de sucesso *'],
+                    ['testesObrigatorios', 'Testes obrigatórios'],
+                    ['indisponibilidadePrevista', 'Indisponibilidade prevista'],
+                    ['comunicacaoColaboradores', 'Comunicação aos colaboradores'],
+                    ['autorizacaoAcessoPrivilegiado', 'Autorização de acesso privilegiado'],
+                  ] as Array<[keyof typeof f5, string]>
+                ).map(([key, label]) => (
+                  <div className="space-y-1.5" key={key}>
+                    <Label>{label}</Label>
+                    <Textarea rows={2} value={String(f5[key])} onChange={(e) => setF5((p) => ({ ...p, [key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Emitir ordem de implementação</Button></div>
             </form>
           ) : dados5 ? (
             <>
@@ -669,25 +681,27 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
         {/* Etapa 6 — Execução */}
         <TabsContent value="etapa6" className="space-y-3 pt-3">
           {etapa6Editable ? (
-            <form onSubmit={submitEtapa6} className="space-y-3">
-              <div className="space-y-1.5"><Label>Data de execução realizada</Label><Input type="date" value={f6.dataExecucaoRealizada} onChange={(e) => setF6((p) => ({ ...p, dataExecucaoRealizada: e.target.value }))} /></div>
-              {(
-                [
-                  ['relatorioTecnico', 'Relatório técnico de implementação *'],
-                  ['configuracaoAnterior', 'Configuração anterior'],
-                  ['configuracaoPosterior', 'Configuração posterior'],
-                  ['usuariosExecutores', 'Usuários que executaram a mudança'],
-                  ['resultadosTestes', 'Resultados dos testes'],
-                  ['falhas', 'Falhas encontradas'],
-                  ['medidasCorretivas', 'Medidas corretivas'],
-                ] as Array<[keyof typeof f6, string]>
-              ).map(([key, label]) => (
-                <div className="space-y-1.5" key={key}>
-                  <Label>{label}</Label>
-                  <Textarea rows={2} value={String(f6[key])} onChange={(e) => setF6((p) => ({ ...p, [key]: e.target.value }))} />
-                </div>
-              ))}
-              <div className="flex justify-end"><Button type="submit" disabled={isPending}>Registrar execução</Button></div>
+            <form onSubmit={submitEtapa6} className="space-y-4">
+              <div className="space-y-1.5 sm:w-1/2 sm:pr-2"><Label>Data de execução realizada</Label><Input type="date" value={f6.dataExecucaoRealizada} onChange={(e) => setF6((p) => ({ ...p, dataExecucaoRealizada: e.target.value }))} /></div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ['relatorioTecnico', 'Relatório técnico de implementação *'],
+                    ['configuracaoAnterior', 'Configuração anterior'],
+                    ['configuracaoPosterior', 'Configuração posterior'],
+                    ['usuariosExecutores', 'Usuários que executaram a mudança'],
+                    ['resultadosTestes', 'Resultados dos testes'],
+                    ['falhas', 'Falhas encontradas'],
+                    ['medidasCorretivas', 'Medidas corretivas'],
+                  ] as Array<[keyof typeof f6, string]>
+                ).map(([key, label]) => (
+                  <div className="space-y-1.5" key={key}>
+                    <Label>{label}</Label>
+                    <Textarea rows={2} value={String(f6[key])} onChange={(e) => setF6((p) => ({ ...p, [key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Registrar execução</Button></div>
             </form>
           ) : dados6 ? (
             <>
@@ -707,39 +721,43 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
         {/* Etapa 7 — Teste e Aceite */}
         <TabsContent value="etapa7" className="space-y-3 pt-3">
           {etapa7Editable ? (
-            <form onSubmit={submitEtapa7} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>Resultado *</Label>
-                <Select value={f7.aceiteResultado} onValueChange={(v) => v && setF7((p) => ({ ...p, aceiteResultado: v as typeof p.aceiteResultado }))}>
-                  <SelectTrigger><SelectValue>{selectLabel(RESULTADO_ACEITE_LABEL)}</SelectValue></SelectTrigger>
-                  <SelectContent>{Object.entries(RESULTADO_ACEITE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-                </Select>
-                {f7.aceiteResultado === 'NAO_CONFORME' && (
-                  <p className="text-xs text-amber-700">Um resultado não conforme devolve a recomendação para a Etapa 6 (retrabalho).</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label>Controlador que assina o aceite *</Label>
-                <Select value={f7.aceiteControladorUserId} onValueChange={(v) => v && setF7((p) => ({ ...p, aceiteControladorUserId: v }))}>
-                  <SelectTrigger><SelectValue>{(v: unknown) => titulares.find((m) => m.id === v)?.name ?? 'Selecione'}</SelectValue></SelectTrigger>
-                  <SelectContent>{titulares.map((m) => <SelectItem key={m.id} value={m.id}>{m.name ?? m.email}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              {(
-                [
-                  ['requisitoAtendido', 'Requisito atendido *'],
-                  ['testesRealizados', 'Testes realizados *'],
-                  ['resultadoObtido', 'Resultado obtido *'],
-                  ['pendencias', 'Pendências'],
-                  ['riscoResidual', 'Risco residual'],
-                ] as Array<[keyof typeof f7, string]>
-              ).map(([key, label]) => (
-                <div className="space-y-1.5" key={key}>
-                  <Label>{label}</Label>
-                  <Textarea rows={2} value={String(f7[key])} onChange={(e) => setF7((p) => ({ ...p, [key]: e.target.value }))} />
+            <form onSubmit={submitEtapa7} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Resultado *</Label>
+                  <Select value={f7.aceiteResultado} onValueChange={(v) => v && setF7((p) => ({ ...p, aceiteResultado: v as typeof p.aceiteResultado }))}>
+                    <SelectTrigger><SelectValue>{selectLabel(RESULTADO_ACEITE_LABEL)}</SelectValue></SelectTrigger>
+                    <SelectContent>{Object.entries(RESULTADO_ACEITE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+                  </Select>
+                  {f7.aceiteResultado === 'NAO_CONFORME' && (
+                    <p className="text-xs text-amber-700">Um resultado não conforme devolve a recomendação para a Etapa 6 (retrabalho).</p>
+                  )}
                 </div>
-              ))}
-              <div className="flex justify-end"><Button type="submit" disabled={isPending}>Registrar aceite</Button></div>
+                <div className="space-y-1.5">
+                  <Label>Controlador que assina o aceite *</Label>
+                  <Select value={f7.aceiteControladorUserId} onValueChange={(v) => v && setF7((p) => ({ ...p, aceiteControladorUserId: v }))}>
+                    <SelectTrigger><SelectValue>{(v: unknown) => titulares.find((m) => m.id === v)?.name ?? 'Selecione'}</SelectValue></SelectTrigger>
+                    <SelectContent>{titulares.map((m) => <SelectItem key={m.id} value={m.id}>{m.name ?? m.email}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ['requisitoAtendido', 'Requisito atendido *'],
+                    ['testesRealizados', 'Testes realizados *'],
+                    ['resultadoObtido', 'Resultado obtido *'],
+                    ['pendencias', 'Pendências'],
+                    ['riscoResidual', 'Risco residual'],
+                  ] as Array<[keyof typeof f7, string]>
+                ).map(([key, label]) => (
+                  <div className="space-y-1.5" key={key}>
+                    <Label>{label}</Label>
+                    <Textarea rows={2} value={String(f7[key])} onChange={(e) => setF7((p) => ({ ...p, [key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Registrar aceite</Button></div>
             </form>
           ) : dados7 ? (
             <>
@@ -761,22 +779,22 @@ export function RecomendacaoTecnicaDetalhe({ serventiaId, recomendacao: r, membr
         {/* Etapa 8 — Atualização dos documentos de governança */}
         <TabsContent value="etapa8" className="space-y-3 pt-3">
           {etapa8Editable ? (
-            <form onSubmit={submitEtapa8} className="space-y-3">
+            <form onSubmit={submitEtapa8} className="space-y-4">
               <p className="text-sm text-muted-foreground">Marque os documentos de governança atualizados em razão desta mudança.</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {DOC_CHECKLIST.map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={f8[key] as boolean} onChange={(e) => setF8((p) => ({ ...p, [key]: e.target.checked }))} />
+                    <input type="checkbox" className="h-4 w-4 rounded border-input accent-brand" checked={f8[key] as boolean} onChange={(e) => setF8((p) => ({ ...p, [key]: e.target.checked }))} />
                     {label}
                   </label>
                 ))}
               </div>
               <div className="space-y-1.5"><Label>Outros</Label><Textarea rows={2} value={f8.outros} onChange={(e) => setF8((p) => ({ ...p, outros: e.target.value }))} /></div>
-              <div className="flex justify-end"><Button type="submit" disabled={isPending}>Concluir recomendação</Button></div>
+              <div className="flex justify-end"><Button type="submit" variant="brand" disabled={isPending}>Concluir recomendação</Button></div>
             </form>
           ) : dados8 ? (
             <>
-              <div className="grid grid-cols-2 gap-1 text-sm">
+              <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
                 {DOC_CHECKLIST.map(({ key, label }) => (
                   <p key={key}>{dados8[key as keyof Etapa8Data] ? '✓' : '—'} {label}</p>
                 ))}

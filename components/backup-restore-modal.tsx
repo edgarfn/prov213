@@ -92,7 +92,7 @@ export function BackupRestoreModal({ backup, onClose }: BackupRestoreModalProps)
 
   return (
     <Dialog open={!!backup} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5" />

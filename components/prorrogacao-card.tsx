@@ -200,7 +200,7 @@ export function ProrrogacaoCard({ serventiaId, classe, prazoEtapas12Atual, histo
       </CardContent>
 
       <Dialog open={solicitarOpen} onOpenChange={(o) => !o && setSolicitarOpen(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>Solicitar prorrogação de prazo</DialogTitle></DialogHeader>
           <form onSubmit={handleSolicitar} className="space-y-3">
             <p className="text-xs text-muted-foreground">
@@ -230,7 +230,7 @@ export function ProrrogacaoCard({ serventiaId, classe, prazoEtapas12Atual, histo
             )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setSolicitarOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isPending}>Enviar solicitação</Button>
+              <Button type="submit" variant="brand" disabled={isPending}>Enviar solicitação</Button>
             </div>
           </form>
         </DialogContent>

@@ -82,16 +82,16 @@ export function EditarServentiaDialog({ serventia, open, onOpenChange, onSaved }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Editar serventia</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
           <div className="space-y-1.5">
             <Label>Nome da Serventia *</Label>
             <Input value={dados.nome} onChange={(e) => atualizar('nome', e.target.value)} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>CNS *</Label>
               <Input value={dados.cns} onChange={(e) => atualizar('cns', e.target.value)} required />
@@ -101,7 +101,7 @@ export function EditarServentiaDialog({ serventia, open, onOpenChange, onSaved }
               <Input value={dados.cnpj} onChange={(e) => atualizar('cnpj', e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Município *</Label>
               <Input value={dados.municipio} onChange={(e) => atualizar('municipio', e.target.value)} required />
@@ -117,45 +117,51 @@ export function EditarServentiaDialog({ serventia, open, onOpenChange, onSaved }
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Classe da Serventia *</Label>
-            <Select value={dados.classe} onValueChange={(v) => v && atualizar('classe', v)}>
-              <SelectTrigger><SelectValue>{selectLabel(CLASSE_LABEL)}</SelectValue></SelectTrigger>
-              <SelectContent>
-                {Object.entries(CLASSE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Classe da Serventia *</Label>
+              <Select value={dados.classe} onValueChange={(v) => v && atualizar('classe', v)}>
+                <SelectTrigger><SelectValue>{selectLabel(CLASSE_LABEL)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CLASSE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tipo de Solução de TIC *</Label>
+              <Select value={dados.tipoSolucao} onValueChange={(v) => v && atualizar('tipoSolucao', v)}>
+                <SelectTrigger><SelectValue>{selectLabel(TIPO_SOLUCAO_LABEL)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TIPO_SOLUCAO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Tipo de Solução de TIC *</Label>
-            <Select value={dados.tipoSolucao} onValueChange={(v) => v && atualizar('tipoSolucao', v)}>
-              <SelectTrigger><SelectValue>{selectLabel(TIPO_SOLUCAO_LABEL)}</SelectValue></SelectTrigger>
-              <SelectContent>
-                {Object.entries(TIPO_SOLUCAO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Infraestrutura *</Label>
-            <Select value={dados.infra} onValueChange={(v) => v && atualizar('infra', v)}>
-              <SelectTrigger><SelectValue>{selectLabel(INFRA_LABEL)}</SelectValue></SelectTrigger>
-              <SelectContent>
-                {Object.entries(INFRA_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Data de Vigência da Norma *</Label>
-            <Input type="date" value={dados.dataVigenciaNorma} onChange={(e) => atualizar('dataVigenciaNorma', e.target.value)} required />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Infraestrutura *</Label>
+              <Select value={dados.infra} onValueChange={(v) => v && atualizar('infra', v)}>
+                <SelectTrigger><SelectValue>{selectLabel(INFRA_LABEL)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(INFRA_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Data de Vigência da Norma *</Label>
+              <Input type="date" value={dados.dataVigenciaNorma} onChange={(e) => atualizar('dataVigenciaNorma', e.target.value)} required />
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Responsável Técnico de TIC</Label>
-            <Input value={dados.responsavelTecnico} onChange={(e) => atualizar('responsavelTecnico', e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Controlador de Dados (LGPD)</Label>
-            <Input value={dados.controladorDados} onChange={(e) => atualizar('controladorDados', e.target.value)} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Responsável Técnico de TIC</Label>
+              <Input value={dados.responsavelTecnico} onChange={(e) => atualizar('responsavelTecnico', e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Controlador de Dados (LGPD)</Label>
+              <Input value={dados.controladorDados} onChange={(e) => atualizar('controladorDados', e.target.value)} />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>DPO — Encarregado de Proteção de Dados</Label>
@@ -164,7 +170,7 @@ export function EditarServentiaDialog({ serventia, open, onOpenChange, onSaved }
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" variant="brand" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Salvar alterações
             </Button>

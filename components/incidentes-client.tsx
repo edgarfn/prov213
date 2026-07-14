@@ -392,33 +392,60 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
 
       {/* Criar incidente */}
       <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Registrar incidente de segurança</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-            <div className="space-y-1.5">
-              <Label>Título *</Label>
-              <Input value={form.titulo} onChange={(e) => setForm((p) => ({ ...p, titulo: e.target.value }))} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Descrição *</Label>
-              <Textarea rows={3} value={form.descricao} onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                Categoria
-                <InfoTooltip chave="CATEGORIA_INCIDENTE" />
-              </Label>
-              <Select value={form.categoria} onValueChange={(v) => v && setForm((p) => ({ ...p, categoria: v }))}>
-                <SelectTrigger><SelectValue>{selectLabel(CATEGORIA_LABEL)}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CATEGORIA_LABEL).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Título *</Label>
+                <Input value={form.titulo} onChange={(e) => setForm((p) => ({ ...p, titulo: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  Gravidade *
+                  <InfoTooltip chave="GRAVIDADE_INCIDENTE" />
+                </Label>
+                <Select value={form.gravidade} onValueChange={(v) => v && setForm((p) => ({ ...p, gravidade: v }))}>
+                  <SelectTrigger><SelectValue>{selectLabel(GRAVIDADE_LABEL)}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BAIXO">Baixo</SelectItem>
+                    <SelectItem value="MEDIO">Médio</SelectItem>
+                    <SelectItem value="ALTO">Alto</SelectItem>
+                    <SelectItem value="CRITICO">Crítico — aciona prazo de 72h</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Descrição *</Label>
+                <Textarea rows={3} value={form.descricao} onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  Categoria
+                  <InfoTooltip chave="CATEGORIA_INCIDENTE" />
+                </Label>
+                <Select value={form.categoria} onValueChange={(v) => v && setForm((p) => ({ ...p, categoria: v }))}>
+                  <SelectTrigger><SelectValue>{selectLabel(CATEGORIA_LABEL)}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(CATEGORIA_LABEL).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Responsável pelo tratamento</Label>
+                <Select value={form.responsavelId} onValueChange={(v) => v && setForm((p) => ({ ...p, responsavelId: v }))}>
+                  <SelectTrigger><SelectValue>{usuarioLabel}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não atribuído</SelectItem>
+                    {usuarios.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name ?? u.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5">
                 <Label>Data de ocorrência *</Label>
                 <Input type="datetime-local" value={form.dataOcorrencia} onChange={(e) => setForm((p) => ({ ...p, dataOcorrencia: e.target.value }))} required />
@@ -427,74 +454,47 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
                 <Label>Data de ciência *</Label>
                 <Input type="datetime-local" value={form.dataCiencia} onChange={(e) => setForm((p) => ({ ...p, dataCiencia: e.target.value }))} required />
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                Gravidade *
-                <InfoTooltip chave="GRAVIDADE_INCIDENTE" />
-              </Label>
-              <Select value={form.gravidade} onValueChange={(v) => v && setForm((p) => ({ ...p, gravidade: v }))}>
-                <SelectTrigger><SelectValue>{selectLabel(GRAVIDADE_LABEL)}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="BAIXO">Baixo</SelectItem>
-                  <SelectItem value="MEDIO">Médio</SelectItem>
-                  <SelectItem value="ALTO">Alto</SelectItem>
-                  <SelectItem value="CRITICO">Crítico — aciona prazo de 72h</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Responsável pelo tratamento</Label>
-              <Select value={form.responsavelId} onValueChange={(v) => v && setForm((p) => ({ ...p, responsavelId: v }))}>
-                <SelectTrigger><SelectValue>{usuarioLabel}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Não atribuído</SelectItem>
-                  {usuarios.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name ?? u.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                Dados pessoais envolvidos?
-                <InfoTooltip chave="DADOS_PESSOAIS_ENVOLVIDOS" />
-              </Label>
-              <Select
-                value={form.dadosPessoaisEnvolvidos}
-                onValueChange={(v) => v && setForm((p) => ({ ...p, dadosPessoaisEnvolvidos: v }))}
-              >
-                <SelectTrigger><SelectValue>{selectLabel(SIM_NAO_LABEL)}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="false">Não</SelectItem>
-                  <SelectItem value="true">Sim</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {form.dadosPessoaisEnvolvidos === 'true' && (
-              <div className="space-y-3 rounded-lg border border-purple-100 bg-purple-50 p-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Categorias de dados afetados</Label>
-                  <Input
-                    placeholder="Ex.: CPF, nome completo, endereço"
-                    value={form.categoriasDadosAfetados}
-                    onChange={(e) => setForm((p) => ({ ...p, categoriasDadosAfetados: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Quantidade estimada de titulares afetados</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.quantidadeTitularesAfetados}
-                    onChange={(e) => setForm((p) => ({ ...p, quantidadeTitularesAfetados: e.target.value }))}
-                  />
-                </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="flex items-center gap-1.5">
+                  Dados pessoais envolvidos?
+                  <InfoTooltip chave="DADOS_PESSOAIS_ENVOLVIDOS" />
+                </Label>
+                <Select
+                  value={form.dadosPessoaisEnvolvidos}
+                  onValueChange={(v) => v && setForm((p) => ({ ...p, dadosPessoaisEnvolvidos: v }))}
+                >
+                  <SelectTrigger><SelectValue>{selectLabel(SIM_NAO_LABEL)}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">Não</SelectItem>
+                    <SelectItem value="true">Sim</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+              {form.dadosPessoaisEnvolvidos === 'true' && (
+                <div className="grid grid-cols-1 gap-4 rounded-lg border border-purple-100 bg-purple-50 p-3 sm:col-span-2 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Categorias de dados afetados</Label>
+                    <Input
+                      placeholder="Ex.: CPF, nome completo, endereço"
+                      value={form.categoriasDadosAfetados}
+                      onChange={(e) => setForm((p) => ({ ...p, categoriasDadosAfetados: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Quantidade estimada de titulares afetados</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.quantidadeTitularesAfetados}
+                      onChange={(e) => setForm((p) => ({ ...p, quantidadeTitularesAfetados: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isPending}>Registrar</Button>
+              <Button type="submit" variant="brand" disabled={isPending}>Registrar</Button>
             </div>
           </form>
         </DialogContent>
@@ -502,7 +502,7 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
 
       {/* Detalhe / atualização */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selected && (
             <>
               <DialogHeader><DialogTitle>{selected.titulo}</DialogTitle></DialogHeader>
@@ -562,7 +562,7 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5 text-xs">
                       Categoria
@@ -610,7 +610,7 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
                 </div>
 
                 {dadosPessoaisEnvolvidos && (
-                  <div className="space-y-3 rounded-lg border border-purple-100 bg-purple-50 p-3">
+                  <div className="grid grid-cols-1 gap-4 rounded-lg border border-purple-100 bg-purple-50 p-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Categorias de dados afetados</Label>
                       <Input
@@ -630,7 +630,7 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
                         disabled={somenteLeitura}
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 sm:col-span-2">
                       <Label className="flex items-center gap-1.5 text-xs">
                         Riscos aos titulares
                         <InfoTooltip chave="RISCOS_TITULARES" />
@@ -659,7 +659,7 @@ export function IncidentesClient({ serventiaId, incidentes, usuarios, papelAtual
 
                 {!somenteLeitura && (
                   <div className="flex justify-between pt-2">
-                    <Button size="sm" variant="ghost" disabled={isPending} onClick={handleSalvarDetalhes}>Salvar</Button>
+                    <Button size="sm" variant="brand" disabled={isPending} onClick={handleSalvarDetalhes}>Salvar</Button>
                     <div className="flex gap-2">
                       {selected.status !== 'EM_TRATAMENTO' && selected.status !== 'ENCERRADO' && (
                         <Button size="sm" variant="outline" disabled={isPending} onClick={() => handleUpdateStatus('EM_TRATAMENTO')}>Em tratamento</Button>

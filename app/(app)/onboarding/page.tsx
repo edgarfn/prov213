@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,7 +22,6 @@ const STEPS = [
 ]
 
 export default function OnboardingPage() {
-  const router = useRouter()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +103,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8">
+    <div className="max-w-4xl mx-auto py-8">
       <div className="mb-8 flex items-start gap-4">
         <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-50 ring-1 ring-blue-100">
           <Building2 className="h-5 w-5 text-blue-600" />
@@ -180,28 +178,30 @@ export default function OnboardingPage() {
                   onChange={(e) => atualizar('nome', e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="cns">
-                  CNS — Código Nacional de Serventia *
-                  <span className="ml-2 text-xs text-muted-foreground">(fornecido pelo CNJ)</span>
-                </Label>
-                <Input
-                  id="cns"
-                  placeholder="Ex: SP-12345-A"
-                  value={dados.cns}
-                  onChange={(e) => atualizar('cns', e.target.value)}
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="cns">
+                    CNS — Código Nacional de Serventia *
+                    <span className="ml-2 text-xs text-muted-foreground">(fornecido pelo CNJ)</span>
+                  </Label>
+                  <Input
+                    id="cns"
+                    placeholder="Ex: SP-12345-A"
+                    value={dados.cns}
+                    onChange={(e) => atualizar('cns', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj">CNPJ</Label>
+                  <Input
+                    id="cnpj"
+                    placeholder="XX.XXX.XXX/XXXX-XX"
+                    value={dados.cnpj}
+                    onChange={(e) => atualizar('cnpj', e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="cnpj">CNPJ</Label>
-                <Input
-                  id="cnpj"
-                  placeholder="XX.XXX.XXX/XXXX-XX"
-                  value={dados.cnpj}
-                  onChange={(e) => atualizar('cnpj', e.target.value)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="municipio">Município *</Label>
                   <Input
@@ -278,35 +278,37 @@ export default function OnboardingPage() {
                 </Alert>
               )}
 
-              <div className="space-y-2">
-                <Label>Tipo de Solução de TIC *</Label>
-                <Select value={dados.tipoSolucao} onValueChange={(v) => { if (v) atualizar('tipoSolucao', v) }}>
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(v: string) => (v ? TIPO_SOLUCAO_LABEL[v] ?? v : 'Como os sistemas são gerenciados?')}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PROPRIA">Própria — TI interna</SelectItem>
-                    <SelectItem value="CONTRATADA">Contratada — empresa terceirizada</SelectItem>
-                    <SelectItem value="COMPARTILHADA">Compartilhada — com outras serventias</SelectItem>
-                    <SelectItem value="COLETIVA">Coletiva — solução conjunta do sistema notarial</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Tipo de Solução de TIC *</Label>
+                  <Select value={dados.tipoSolucao} onValueChange={(v) => { if (v) atualizar('tipoSolucao', v) }}>
+                    <SelectTrigger>
+                      <SelectValue>
+                        {(v: string) => (v ? TIPO_SOLUCAO_LABEL[v] ?? v : 'Como os sistemas são gerenciados?')}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PROPRIA">Própria — TI interna</SelectItem>
+                      <SelectItem value="CONTRATADA">Contratada — empresa terceirizada</SelectItem>
+                      <SelectItem value="COMPARTILHADA">Compartilhada — com outras serventias</SelectItem>
+                      <SelectItem value="COLETIVA">Coletiva — solução conjunta do sistema notarial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label>Infraestrutura *</Label>
-                <Select value={dados.infra} onValueChange={(v) => { if (v) atualizar('infra', v) }}>
-                  <SelectTrigger>
-                    <SelectValue>{(v: string) => (v ? INFRA_LABEL[v] ?? v : 'Onde ficam os sistemas?')}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LOCAL">Local — servidores físicos no cartório</SelectItem>
-                    <SelectItem value="NUVEM">Nuvem — sistemas em cloud</SelectItem>
-                    <SelectItem value="HIBRIDA">Híbrida — parte local, parte em nuvem</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Label>Infraestrutura *</Label>
+                  <Select value={dados.infra} onValueChange={(v) => { if (v) atualizar('infra', v) }}>
+                    <SelectTrigger>
+                      <SelectValue>{(v: string) => (v ? INFRA_LABEL[v] ?? v : 'Onde ficam os sistemas?')}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOCAL">Local — servidores físicos no cartório</SelectItem>
+                      <SelectItem value="NUVEM">Nuvem — sistemas em cloud</SelectItem>
+                      <SelectItem value="HIBRIDA">Híbrida — parte local, parte em nuvem</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -332,23 +334,25 @@ export default function OnboardingPage() {
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 mb-2">
                 A designação formal dos responsáveis é exigência do Art. 6º do Provimento. Você pode preencher agora ou depois nas configurações.
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="rt">Responsável Técnico de TIC</Label>
-                <Input
-                  id="rt"
-                  placeholder="Nome completo"
-                  value={dados.responsavelTecnico}
-                  onChange={(e) => atualizar('responsavelTecnico', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cd">Controlador de Dados (LGPD)</Label>
-                <Input
-                  id="cd"
-                  placeholder="Nome completo — geralmente o próprio titular"
-                  value={dados.controladorDados}
-                  onChange={(e) => atualizar('controladorDados', e.target.value)}
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="rt">Responsável Técnico de TIC</Label>
+                  <Input
+                    id="rt"
+                    placeholder="Nome completo"
+                    value={dados.responsavelTecnico}
+                    onChange={(e) => atualizar('responsavelTecnico', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cd">Controlador de Dados (LGPD)</Label>
+                  <Input
+                    id="cd"
+                    placeholder="Nome completo — geralmente o próprio titular"
+                    value={dados.controladorDados}
+                    onChange={(e) => atualizar('controladorDados', e.target.value)}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dpo">
@@ -411,11 +415,11 @@ export default function OnboardingPage() {
           <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
         </Button>
         {step < 4 ? (
-          <Button onClick={() => setStep((p) => p + 1)} disabled={!canProceed()}>
+          <Button variant="brand" onClick={() => setStep((p) => p + 1)} disabled={!canProceed()}>
             Próximo <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         ) : (
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button variant="brand" onClick={handleSubmit} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Criar meu plano de conformidade
           </Button>

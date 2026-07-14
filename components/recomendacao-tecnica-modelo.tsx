@@ -43,7 +43,7 @@ export function RecomendacaoTecnicaModeloButton() {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Modelo preenchido — exemplo ilustrativo</DialogTitle></DialogHeader>
 
           <Alert>
@@ -86,7 +86,7 @@ export function RecomendacaoTecnicaModeloButton() {
                 <CampoLeitura label="Alternativas possíveis" value={m.recomendacao.alternativasPossiveis} />
                 <CampoLeitura label="Estimativa de custo" value={m.recomendacao.estimativaCusto} />
                 <CampoLeitura label="Observações sobre evidências coletadas" value={m.recomendacao.evidenciasColetadasObs} />
-                <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
+                <div className="grid grid-cols-1 gap-3 pt-2 text-sm sm:grid-cols-3">
                   <div><p className="text-xs text-muted-foreground">Data de identificação</p>{m.dataIdentificacao}</div>
                   <div><p className="text-xs text-muted-foreground">Prazo recomendado</p>{m.prazoRecomendado}</div>
                   <div><p className="text-xs text-muted-foreground">Responsável técnico</p>{m.responsavelTecnicoNome}</div>
@@ -125,7 +125,7 @@ export function RecomendacaoTecnicaModeloButton() {
                 <CampoLeitura label="Fonte orçamentária" value={m.decisaoDetalhes.fonteOrcamentaria} />
                 <CampoLeitura label="Condições impostas" value={m.decisaoDetalhes.condicoesImpostas} />
                 <CampoLeitura label="Risco residual conhecido" value={m.decisaoDetalhes.riscoResidualConhecido} />
-                <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
+                <div className="grid grid-cols-1 gap-3 pt-2 text-sm sm:grid-cols-2">
                   <div><p className="text-xs text-muted-foreground">Valor autorizado</p>R$ {m.valorAutorizado.toFixed(2)}</div>
                   <div><p className="text-xs text-muted-foreground">Prazo de implantação</p>{m.prazoImplantacao}</div>
                 </div>
@@ -171,7 +171,7 @@ export function RecomendacaoTecnicaModeloButton() {
               </TabsContent>
 
               <TabsContent value="etapa8" className="space-y-3 pt-3">
-                <div className="grid grid-cols-2 gap-1 text-sm">
+                <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
                   {DOC_CHECKLIST.map(({ key, label }) => (
                     <p key={key}>{m.documentosAtualizados[key] ? '✓' : '—'} {label}</p>
                   ))}

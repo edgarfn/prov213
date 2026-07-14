@@ -366,15 +366,15 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
 
       {/* Criar */}
       <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Registrar vulnerabilidade</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-            <div className="space-y-1.5">
-              <Label>Descrição *</Label>
-              <Textarea rows={3} value={form.descricao} onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))} required />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Descrição *</Label>
+                <Textarea rows={3} value={form.descricao} onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))} required />
+              </div>
               <div className="space-y-1.5">
                 <Label>Data de identificação *</Label>
                 <Input type="date" value={form.dataIdentificacao} onChange={(e) => setForm((p) => ({ ...p, dataIdentificacao: e.target.value }))} required />
@@ -388,8 +388,6 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
                   Nota CVSS (0-10)
@@ -408,42 +406,42 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                 <Label>CVE (opcional)</Label>
                 <Input placeholder="CVE-2025-12345" value={form.cveReferencia} onChange={(e) => setForm((p) => ({ ...p, cveReferencia: e.target.value }))} />
               </div>
+              <div className="space-y-1.5">
+                <Label>Classificação de risco *</Label>
+                <Select value={form.classificacaoRisco} onValueChange={(v) => v && setForm((p) => ({ ...p, classificacaoRisco: v }))}>
+                  <SelectTrigger><SelectValue>{selectLabel(CLASSIFICACAO_LABEL)}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(CLASSIFICACAO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Ativo/sistema afetado</Label>
+                <Input
+                  placeholder="Ex.: Servidor de e-mail, Portal do cliente"
+                  value={form.ativoAfetado}
+                  onChange={(e) => setForm((p) => ({ ...p, ativoAfetado: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Responsável pela correção</Label>
+                <Select value={form.responsavelId} onValueChange={(v) => v && setForm((p) => ({ ...p, responsavelId: v }))}>
+                  <SelectTrigger><SelectValue>{usuarioLabel}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não atribuído</SelectItem>
+                    {usuarios.map((u) => <SelectItem key={u.id} value={u.id}>{u.name ?? u.email}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" checked={form.exploracaoAtiva} onChange={(e) => setForm((p) => ({ ...p, exploracaoAtiva: e.target.checked }))} />
+                Há evidência de exploração ativa ou risco iminente (prazo cai para 72h)
+                <InfoTooltip chave="EXPLORACAO_ATIVA" />
+              </label>
             </div>
-            <div className="space-y-1.5">
-              <Label>Classificação de risco *</Label>
-              <Select value={form.classificacaoRisco} onValueChange={(v) => v && setForm((p) => ({ ...p, classificacaoRisco: v }))}>
-                <SelectTrigger><SelectValue>{selectLabel(CLASSIFICACAO_LABEL)}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CLASSIFICACAO_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Ativo/sistema afetado</Label>
-              <Input
-                placeholder="Ex.: Servidor de e-mail, Portal do cliente"
-                value={form.ativoAfetado}
-                onChange={(e) => setForm((p) => ({ ...p, ativoAfetado: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Responsável pela correção</Label>
-              <Select value={form.responsavelId} onValueChange={(v) => v && setForm((p) => ({ ...p, responsavelId: v }))}>
-                <SelectTrigger><SelectValue>{usuarioLabel}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Não atribuído</SelectItem>
-                  {usuarios.map((u) => <SelectItem key={u.id} value={u.id}>{u.name ?? u.email}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.exploracaoAtiva} onChange={(e) => setForm((p) => ({ ...p, exploracaoAtiva: e.target.checked }))} />
-              Há evidência de exploração ativa ou risco iminente (prazo cai para 72h)
-              <InfoTooltip chave="EXPLORACAO_ATIVA" />
-            </label>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isPending}>Registrar</Button>
+              <Button type="submit" variant="brand" disabled={isPending}>Registrar</Button>
             </div>
           </form>
         </DialogContent>
@@ -451,7 +449,7 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
 
       {/* Detalhe */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selected && (
             <>
               <DialogHeader><DialogTitle>{CLASSIFICACAO_LABEL[selected.classificacaoRisco]} — {selected.descricao.slice(0, 60)}</DialogTitle></DialogHeader>
@@ -466,7 +464,7 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                   <InfoTooltip chave="PRAZO_VULNERABILIDADE" className="h-3.5 w-3.5 text-slate-400 hover:text-blue-600 cursor-help flex-shrink-0 mt-0.5" />
                 </p>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Classificação de risco</Label>
                     <Select value={classificacaoRisco} onValueChange={(v) => v && setClassificacaoRisco(v)} disabled={somenteLeitura}>
@@ -488,9 +486,6 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Origem</Label>
                     <Select value={origem} onValueChange={(v) => v && setOrigem(v)} disabled={somenteLeitura}>
@@ -510,9 +505,6 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5 text-xs">
                       Nota CVSS
@@ -532,18 +524,16 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
                     <Label className="text-xs">CVE</Label>
                     <Input placeholder="CVE-2025-12345" value={cveReferencia} onChange={(e) => setCveReferencia(e.target.value)} disabled={somenteLeitura} />
                   </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs">Ativo/sistema afetado</Label>
+                    <Input value={ativoAfetado} onChange={(e) => setAtivoAfetado(e.target.value)} disabled={somenteLeitura} />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                    <input type="checkbox" checked={exploracaoAtiva} onChange={(e) => setExploracaoAtiva(e.target.checked)} disabled={somenteLeitura} />
+                    Há evidência de exploração ativa ou risco iminente (prazo cai para 72h)
+                    <InfoTooltip chave="EXPLORACAO_ATIVA" />
+                  </label>
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Ativo/sistema afetado</Label>
-                  <Input value={ativoAfetado} onChange={(e) => setAtivoAfetado(e.target.value)} disabled={somenteLeitura} />
-                </div>
-
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={exploracaoAtiva} onChange={(e) => setExploracaoAtiva(e.target.checked)} disabled={somenteLeitura} />
-                  Há evidência de exploração ativa ou risco iminente (prazo cai para 72h)
-                  <InfoTooltip chave="EXPLORACAO_ATIVA" />
-                </label>
 
                 <div className="space-y-1.5">
                   <Label>Providências adotadas</Label>
@@ -567,7 +557,7 @@ export function VulnerabilidadesClient({ serventiaId, vulnerabilidades, usuarios
 
                 {!somenteLeitura && (
                   <div className="flex justify-end pt-2">
-                    <Button size="sm" disabled={isPending} onClick={handleSalvar}>Salvar</Button>
+                    <Button size="sm" variant="brand" disabled={isPending} onClick={handleSalvar}>Salvar</Button>
                   </div>
                 )}
 

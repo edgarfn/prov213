@@ -9,11 +9,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { atualizarProgresso, declaraConclusaoEtapa } from '@/app/actions/progresso'
 import { EvidenciasUpload } from '@/components/evidencias-upload'
 import { podeDeclaraEtapa, parametrosPorClasse } from '@/lib/business-rules'
-import type { Serventia, Etapa, Requisito, ProgressoRequisito, Evidencia, RolePapel, StatusRequisito } from '@/types/prisma'
+import type { Serventia, Requisito, ProgressoRequisito, Evidencia, RolePapel, StatusRequisito } from '@/types/prisma'
 import {
   CheckCircle2,
   Circle,
@@ -323,7 +324,7 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
                                 className="space-y-3 border rounded-lg p-3"
                               >
                                 <div className="space-y-1">
-                                  <label className="text-xs font-medium">Status</label>
+                                  <Label className="text-xs font-medium">Status</Label>
                                   <Select name="status" defaultValue={status}>
                                     <SelectTrigger>
                                       <SelectValue>
@@ -339,7 +340,7 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
                                   </Select>
                                 </div>
                                 <div className="space-y-1">
-                                  <label className="text-xs font-medium">Solução adotada</label>
+                                  <Label className="text-xs font-medium">Solução adotada</Label>
                                   <Textarea
                                     name="solucaoAdotada"
                                     placeholder="Descreva como este requisito foi implementado..."
@@ -349,9 +350,9 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
                                 </div>
                                 {serventia.classe === 'CLASSE_1' && (
                                   <div className="space-y-1">
-                                    <label className="text-xs font-medium">
+                                    <Label className="text-xs font-medium">
                                       Demonstração de equivalência funcional
-                                    </label>
+                                    </Label>
                                     <p className="text-xs text-muted-foreground">
                                       Anexo IV, item VII, &quot;c&quot; — explique por que a solução adotada
                                       atende ao requisito de forma equivalente ou superior. Usado no Relatório
@@ -366,7 +367,7 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
                                   </div>
                                 )}
                                 <div className="space-y-1">
-                                  <label className="text-xs font-medium">Observações</label>
+                                  <Label className="text-xs font-medium">Observações</Label>
                                   <Textarea
                                     name="observacoes"
                                     placeholder="Notas adicionais..."
@@ -375,7 +376,7 @@ export function ChecklistsClient({ serventia, etapas, papelAtual }: ChecklistsCl
                                   />
                                 </div>
                                 <div className="flex gap-2">
-                                  <Button type="submit" size="sm" disabled={isPending}>Salvar</Button>
+                                  <Button type="submit" variant="brand" size="sm" disabled={isPending}>Salvar</Button>
                                   <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>
                                     Cancelar
                                   </Button>

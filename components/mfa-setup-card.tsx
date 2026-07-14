@@ -80,7 +80,7 @@ export function MFASetupCard({ mfaEnabled, mfaVerified }: MFASetupCardProps) {
         )}
 
         {!ativado && fase === 'idle' && (
-          <Button onClick={iniciarSetup} disabled={loading}>
+          <Button variant="brand" onClick={iniciarSetup} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
             Ativar MFA
           </Button>
@@ -127,7 +127,7 @@ export function MFASetupCard({ mfaEnabled, mfaVerified }: MFASetupCardProps) {
                 />
               </div>
               <div className="flex gap-2">
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" variant="brand" disabled={loading}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Confirmar e ativar
                 </Button>
